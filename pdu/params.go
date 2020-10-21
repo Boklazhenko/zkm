@@ -511,9 +511,11 @@ func (v *Uint8Value) String() string {
 }
 
 func (v *Uint8Value) Set(d interface{}) error {
-	switch d.(type) {
-	case uint8, int:
-		v.raw[0] = d.(uint8)
+	switch data := d.(type) {
+	case uint8:
+		v.raw[0] = data
+	case int:
+		v.raw[0] = uint8(data)
 	default:
 		return paramBadType
 	}
@@ -547,9 +549,13 @@ func (v *Uint16Value) String() string {
 }
 
 func (v *Uint16Value) Set(d interface{}) error {
-	switch d.(type) {
-	case uint8, uint16, int:
-		binary.BigEndian.PutUint16(v.raw, d.(uint16))
+	switch data := d.(type) {
+	case uint8:
+		binary.BigEndian.PutUint16(v.raw, uint16(data))
+	case uint16:
+		binary.BigEndian.PutUint16(v.raw, data)
+	case int:
+		binary.BigEndian.PutUint16(v.raw, uint16(data))
 	default:
 		return paramBadType
 	}
@@ -584,9 +590,15 @@ func (v *Uint32Value) String() string {
 }
 
 func (v *Uint32Value) Set(d interface{}) error {
-	switch d.(type) {
-	case uint8, uint16, uint32, int:
-		binary.BigEndian.PutUint32(v.raw, d.(uint32))
+	switch data := d.(type) {
+	case uint32:
+		binary.BigEndian.PutUint32(v.raw, data)
+	case uint8:
+		binary.BigEndian.PutUint32(v.raw, uint32(data))
+	case uint16:
+		binary.BigEndian.PutUint32(v.raw, uint32(data))
+	case int:
+		binary.BigEndian.PutUint32(v.raw, uint32(data))
 	default:
 		return paramBadType
 	}
