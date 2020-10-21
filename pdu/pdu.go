@@ -1,12 +1,15 @@
 package pdu
 
 import (
-	"github.com/Boklazhenko/zkm/pdu/mandatory"
-	"github.com/Boklazhenko/zkm/pdu/optional"
+	"bytes"
+	"encoding/binary"
+	"fmt"
 )
 
 type Id uint32
 type Status uint32
+
+const pduHeaderPartSize = 4
 
 const (
 	GenericNack         Id = 0x80000000
@@ -89,26 +92,84 @@ const (
 	EsmeRUnknownErr      Status = 0x000000ff
 )
 
-type Header struct {
-	Len    uint32
-	Id     Id
-	Status Status
-	Seq    uint32
-}
-
 type Pdu struct {
+	Id              Id
+	Status          Status
+	Seq             uint32
+	MandatoryParams *MandatoryParams
+	OptionalParams  *OptionalParams
 }
 
-func (p *Pdu) Header() *Header {
-	return nil
+func New(id Id) *Pdu {
+	return &Pdu{
+		Id:              id,
+		MandatoryParams: NewMandatoryParams(id),
+		OptionalParams:  NewOptionalParams(),
+	}
 }
 
-func (p *Pdu) Fields() mandatory.Params {
-	return nil
+func (pdu *Pdu) Serialize() []byte {
+	buff := bytes.Buffer{}
+	b := make([]byte, pduHeaderPartSize)
+	binary.BigEndian.PutUint32(b, pdu.Len())
+	buff.Write(b)
+	binary.BigEndian.PutUint32(b, uint32(pdu.Id))
+	buff.Write(b)
+	binary.BigEndian.PutUint32(b, uint32(pdu.Status))
+	buff.Write(b)
+	binary.BigEndian.PutUint32(b, pdu.Seq)
+	buff.Write(b)
+	buff.Write(pdu.MandatoryParams.Serialize())
+	buff.Write(pdu.OptionalParams.Serialize())
+	return buff.Bytes()
 }
 
-func (p *Pdu) TlvFields() optional.Params {
-	return nil
+func (pdu *Pdu) Deserialize(raw []byte) error {
+	buff := bytes.NewBuffer(raw)
+
+	b := make([]byte, pduHeaderPartSize)
+
+	n, err := buff.Read(b)
+	if n != pduHeaderPartSize {
+		return err
+	}
+	l := binary.BigEndian.Uint32(b)
+
+	if int(l) != len(raw) {
+		return fmt.Errorf("bad pdu length: in field - %v, received - %v", l, len(raw))
+	}
+
+	n, err = buff.Read(b)
+	if n != pduHeaderPartSize {
+		return err
+	}
+	pdu.Id = Id(binary.BigEndian.Uint32(b))
+
+	n, err = buff.Read(b)
+	if n != pduHeaderPartSize {
+		return err
+	}
+	pdu.Status = Status(binary.BigEndian.Uint32(b))
+
+	n, err = buff.Read(b)
+	if n != pduHeaderPartSize {
+		return err
+	}
+	pdu.Seq = binary.BigEndian.Uint32(b)
+
+	pdu.MandatoryParams = NewMandatoryParams(pdu.Id)
+
+	if err = pdu.MandatoryParams.Deserialize(buff); err != nil {
+		return err
+	}
+
+	pdu.OptionalParams = NewOptionalParams()
+
+	return pdu.OptionalParams.Deserialize(buff)
+}
+
+func (pdu *Pdu) Len() uint32 {
+	return 4*pduHeaderPartSize + pdu.MandatoryParams.Len() + pdu.OptionalParams.Len()
 }
 
 func (id Id) String() string {
