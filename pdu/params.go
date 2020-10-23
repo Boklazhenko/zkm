@@ -112,7 +112,7 @@ func NewMandatoryParams(id Id) *MandatoryParams {
 		names = []Name{
 			SystemID,
 			Password,
-			SystemID,
+			SystemType,
 			InterfaceVersion,
 			AddrTON,
 			AddrNPI,
@@ -143,11 +143,76 @@ func NewMandatoryParams(id Id) *MandatoryParams {
 			SMLength,
 			ShortMessage,
 		}
-	case SubmitSmResp, DeliverSmResp:
+	case SubmitSmResp, DeliverSmResp, DataSmResp:
 		names = []Name{
 			MessageID,
 		}
-	case EnquireLink, EnquireLinkResp, GenericNack, Unbind, UnbindResp:
+	case EnquireLink, EnquireLinkResp, GenericNack, Unbind, UnbindResp, CancelSmResp, ReplaceSmResp:
+	case Outbind:
+		names = []Name{
+			SystemID,
+			Password,
+		}
+	case DataSm:
+		names = []Name{
+			ServiceType,
+			SourceAddrTON,
+			SourceAddrNPI,
+			SourceAddr,
+			DestAddrTON,
+			DestAddrNPI,
+			DestinationAddr,
+			ESMClass,
+			RegisteredDelivery,
+			DataCoding,
+		}
+	case QuerySm:
+		names = []Name{
+			MessageID,
+			SourceAddrTON,
+			SourceAddrNPI,
+			SourceAddr,
+		}
+	case QuerySmResp:
+		names = []Name{
+			MessageID,
+			FinalDate,
+			MessageState,
+			ErrorCode,
+		}
+	case CancelSm:
+		names = []Name{
+			ServiceType,
+			MessageID,
+			SourceAddrTON,
+			SourceAddrNPI,
+			SourceAddr,
+			DestAddrTON,
+			DestAddrNPI,
+			DestinationAddr,
+		}
+	case ReplaceSm:
+		names = []Name{
+			MessageID,
+			SourceAddrTON,
+			SourceAddrNPI,
+			SourceAddr,
+			ScheduleDeliveryTime,
+			ValidityPeriod,
+			RegisteredDelivery,
+			SMDefaultMsgID,
+			SMLength,
+			ShortMessage,
+		}
+	case AlertNotification:
+		names = []Name{
+			SourceAddrTON,
+			SourceAddrNPI,
+			SourceAddr,
+			EsmeAddrTON,
+			EsmeAddrNPI,
+			EsmeAddr,
+		}
 	}
 
 	params := make(map[Name]*MandatoryParam)
@@ -273,7 +338,7 @@ func NewOptionalParams() *OptionalParams {
 func (ps *OptionalParams) Len() uint32 {
 	totalLen := 0
 	for _, p := range ps.params {
-		totalLen += p.Value().Len()
+		totalLen += 4 + p.Value().Len()
 	}
 
 	return uint32(totalLen)
@@ -289,9 +354,9 @@ func (ps *OptionalParams) Serialize() []byte {
 
 func (ps *OptionalParams) Deserialize(buff *bytes.Buffer) error {
 	for buff.Len() > 0 {
-		bytes := make([]byte, 4)
-		n, err := buff.Read(bytes)
-		if n != len(bytes) {
+		b := make([]byte, 4)
+		n, err := buff.Read(b)
+		if n != len(b) {
 			return fmt.Errorf("not enough data")
 		}
 
@@ -299,14 +364,16 @@ func (ps *OptionalParams) Deserialize(buff *bytes.Buffer) error {
 			return err
 		}
 
-		tag := Tag(binary.BigEndian.Uint16(bytes[:2]))
-		len := binary.BigEndian.Uint16(bytes[2:])
+		tag := Tag(binary.BigEndian.Uint16(b[:2]))
+		l := binary.BigEndian.Uint16(b[2:])
+		optParam := NewOptionalParam(tag, l)
 
-		optParam := NewOptionalParam(tag, len)
-		optParam.Value().Deserialize(buff)
+		if err = optParam.Value().Deserialize(buff); err != nil {
+			return err
+		}
 
-		if len != uint16(optParam.Value().Len()) {
-			return fmt.Errorf("bad optional param: len %v, real len %v", len, optParam.Value().Len())
+		if l != uint16(optParam.Value().Len()) {
+			return fmt.Errorf("bad optional param: len %v, real len %v", l, optParam.Value().Len())
 		}
 
 		ps.params[tag] = optParam
@@ -414,10 +481,12 @@ func (v *OctetStringValue) Set(d interface{}) error {
 }
 
 func (v *OctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	if n, err := buff.Read(v.raw); n == v.Len() {
+	bytes := make([]byte, v.Len())
+	if n, _ := buff.Read(bytes); n == v.Len() {
+		v.raw = bytes
 		return nil
 	} else {
-		return err
+		return fmt.Errorf("readed %v bytes, need %v", n, len(v.raw))
 	}
 }
 
@@ -452,12 +521,12 @@ func (v *COctetStringValue) Set(d interface{}) error {
 }
 
 func (v *COctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	var err error
-	if v.raw, err = buff.ReadBytes(0x00); err != nil {
+	if bytes, err := buff.ReadBytes(0x00); err != nil {
 		return err
-	} else if len(v.raw) > v.maxLen {
+	} else if len(bytes) > v.maxLen {
 		return fmt.Errorf("real length %v exceeded the maximum length %v", len(v.raw), v.maxLen)
 	} else {
+		v.raw = bytes
 		return nil
 	}
 }
@@ -468,7 +537,6 @@ func NewCOctetStringValue(maxLen int) *COctetStringValue {
 
 type FixedCOctetStringValue struct {
 	*COctetStringValue
-	len int
 }
 
 func NewFixedCOctetStringValue(len int) *FixedCOctetStringValue {
@@ -489,11 +557,13 @@ func (v *FixedCOctetStringValue) Set(d interface{}) error {
 }
 
 func (v *FixedCOctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	if err := v.OctetStringValue.Deserialize(buff); err != nil {
+	octetStringValue := NewOctetStringValue(v.maxLen)
+	if err := octetStringValue.Deserialize(buff); err != nil {
 		return err
 	} else if l := len(v.raw); l != 1 || l != v.maxLen {
 		return fmt.Errorf("real length %v not equal 1 or %v fixed length", l, v.maxLen)
 	} else {
+		v.OctetStringValue = octetStringValue
 		return nil
 	}
 }
@@ -524,10 +594,10 @@ func (v *Uint8Value) Set(d interface{}) error {
 }
 
 func (v *Uint8Value) Deserialize(buff *bytes.Buffer) error {
-	var err error
-	if v.raw[0], err = buff.ReadByte(); err != nil {
+	if b, err := buff.ReadByte(); err != nil {
 		return err
 	} else {
+		v.raw[0] = b
 		return nil
 	}
 }
@@ -564,11 +634,13 @@ func (v *Uint16Value) Set(d interface{}) error {
 }
 
 func (v *Uint16Value) Deserialize(buff *bytes.Buffer) error {
-	if n, err := buff.Read(v.raw); n != len(v.raw) {
-		return fmt.Errorf("readed %v bytes, need %v", n, len(v.raw))
+	bytes := make([]byte, v.Len())
+	if n, err := buff.Read(bytes); n != len(bytes) {
+		return fmt.Errorf("readed %v bytes, need %v", n, len(bytes))
 	} else if err != nil {
 		return err
 	} else {
+		v.raw = bytes
 		return nil
 	}
 }
@@ -607,11 +679,13 @@ func (v *Uint32Value) Set(d interface{}) error {
 }
 
 func (v *Uint32Value) Deserialize(buff *bytes.Buffer) error {
-	if n, err := buff.Read(v.raw); n != len(v.raw) {
-		return fmt.Errorf("readed %v bytes, need %v", n, len(v.raw))
+	bytes := make([]byte, v.Len())
+	if n, err := buff.Read(bytes); n != len(bytes) {
+		return fmt.Errorf("readed %v bytes, need %v", n, len(bytes))
 	} else if err != nil {
 		return err
 	} else {
+		v.raw = bytes
 		return nil
 	}
 }
