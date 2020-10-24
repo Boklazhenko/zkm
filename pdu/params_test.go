@@ -63,62 +63,6 @@ func TestNewMandatoryParams(t *testing.T) {
 	}
 }
 
-func TestOctetStringValue(t *testing.T) {
-	lensForNew := []int{0, 4, 10, 60000}
-
-	for _, l := range lensForNew {
-		v := NewOctetStringValue(l)
-		if v.Len() != l {
-			t.Errorf("Len [%v] not equal to the transmitted [%v] after New", v.Len(), l)
-		}
-
-		if !reflect.DeepEqual(v.Raw(), make([]byte, l)) {
-			t.Errorf("raw data not equal default value for the transmitted length [%v] after New", l)
-		}
-
-		if _, err := v.Uint32(); err == nil {
-			t.Errorf("Uint32 not return err after New")
-		}
-
-		lensForSet := []int{0, 2, 3, 15, 10000}
-		for _, l2 := range lensForSet {
-			if err := v.Set(make([]byte, l2)); err != nil {
-				t.Errorf("set error [%v]", err)
-			}
-
-			if v.Len() != l2 {
-				t.Errorf("Len %v not equal to the transmitted [%v] after New", v.Len(), l2)
-			}
-
-			if !reflect.DeepEqual(v.Raw(), make([]byte, l2)) {
-				t.Errorf("raw data not equal default value for the transmitted length [%v] after New", l2)
-			}
-
-			if _, err := v.Uint32(); err == nil {
-				t.Errorf("Uint32 not return err after New")
-			}
-		}
-	}
-
-	tests := []struct {
-		value interface{}
-		ok    bool
-	}{
-		{[]byte{1, 2, 3, 4, 5}, true},
-		{"some string", false},
-		{4, false},
-		{uint8(10), false},
-		{uint32(10000), false},
-	}
-
-	v := NewOctetStringValue(0)
-	for _, test := range tests {
-		if err := v.Set(test.value); (err == nil) != test.ok {
-			t.Errorf("set return err [%v] for value type [%T]", err, test.value)
-		}
-	}
-}
-
 func TestValue(t *testing.T) {
 	type uint32Result struct {
 		value uint32

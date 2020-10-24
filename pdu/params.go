@@ -338,7 +338,7 @@ func NewOptionalParams() *OptionalParams {
 func (ps *OptionalParams) Len() uint32 {
 	totalLen := 0
 	for _, p := range ps.params {
-		totalLen += 4 + p.Value().Len()
+		totalLen += p.Len()
 	}
 
 	return uint32(totalLen)
@@ -346,7 +346,12 @@ func (ps *OptionalParams) Len() uint32 {
 
 func (ps *OptionalParams) Serialize() []byte {
 	buff := bytes.Buffer{}
+	b := make([]byte, 2)
 	for _, p := range ps.params {
+		binary.BigEndian.PutUint16(b, uint16(p.tag))
+		buff.Write(b)
+		binary.BigEndian.PutUint16(b, uint16(p.Value().Len()))
+		buff.Write(b)
 		buff.Write(p.Value().Raw())
 	}
 	return buff.Bytes()
@@ -440,6 +445,10 @@ func (p *OptionalParam) Tag() Tag {
 	return p.tag
 }
 
+func (p *OptionalParam) Len() int {
+	return 4 + p.value.Len()
+}
+
 func (p *OptionalParam) Value() Value {
 	return p.value
 }
@@ -481,9 +490,9 @@ func (v *OctetStringValue) Set(d interface{}) error {
 }
 
 func (v *OctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	bytes := make([]byte, v.Len())
-	if n, _ := buff.Read(bytes); n == v.Len() {
-		v.raw = bytes
+	b := make([]byte, v.Len())
+	if n, _ := buff.Read(b); n == v.Len() {
+		v.raw = b
 		return nil
 	} else {
 		return fmt.Errorf("readed %v bytes, need %v", n, len(v.raw))
@@ -521,12 +530,12 @@ func (v *COctetStringValue) Set(d interface{}) error {
 }
 
 func (v *COctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	if bytes, err := buff.ReadBytes(0x00); err != nil {
+	if b, err := buff.ReadBytes(0x00); err != nil {
 		return err
-	} else if len(bytes) > v.maxLen {
+	} else if len(b) > v.maxLen {
 		return fmt.Errorf("real length %v exceeded the maximum length %v", len(v.raw), v.maxLen)
 	} else {
-		v.raw = bytes
+		v.raw = b
 		return nil
 	}
 }
@@ -634,13 +643,13 @@ func (v *Uint16Value) Set(d interface{}) error {
 }
 
 func (v *Uint16Value) Deserialize(buff *bytes.Buffer) error {
-	bytes := make([]byte, v.Len())
-	if n, err := buff.Read(bytes); n != len(bytes) {
-		return fmt.Errorf("readed %v bytes, need %v", n, len(bytes))
+	b := make([]byte, v.Len())
+	if n, err := buff.Read(b); n != len(b) {
+		return fmt.Errorf("readed %v bytes, need %v", n, len(b))
 	} else if err != nil {
 		return err
 	} else {
-		v.raw = bytes
+		v.raw = b
 		return nil
 	}
 }
@@ -679,13 +688,13 @@ func (v *Uint32Value) Set(d interface{}) error {
 }
 
 func (v *Uint32Value) Deserialize(buff *bytes.Buffer) error {
-	bytes := make([]byte, v.Len())
-	if n, err := buff.Read(bytes); n != len(bytes) {
-		return fmt.Errorf("readed %v bytes, need %v", n, len(bytes))
+	b := make([]byte, v.Len())
+	if n, err := buff.Read(b); n != len(b) {
+		return fmt.Errorf("readed %v bytes, need %v", n, len(b))
 	} else if err != nil {
 		return err
 	} else {
-		v.raw = bytes
+		v.raw = b
 		return nil
 	}
 }
@@ -744,6 +753,8 @@ func (t Tag) String() string {
 		return "sar_total_segments"
 	case TagSarSegmentSeqnum:
 		return "sar_segment_seqnum"
+	case TagScInterfaceVersion:
+		return "sc_interface_version"
 	case TagCallbackNumPresInd:
 		return "callback_num_pres_ind"
 	case TagCallbackNumAtag:

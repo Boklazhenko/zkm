@@ -100,6 +100,14 @@ type Pdu struct {
 	OptionalParams  *OptionalParams
 }
 
+func NewEmpty() *Pdu {
+	return &Pdu{
+		Id:              0,
+		MandatoryParams: NewMandatoryParams(0),
+		OptionalParams:  NewOptionalParams(),
+	}
+}
+
 func New(id Id) *Pdu {
 	return &Pdu{
 		Id:              id,
