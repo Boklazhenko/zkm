@@ -434,6 +434,861 @@ func TestValue(t *testing.T) {
 				},
 			},
 		},
+		{
+			createValue: func() Value {
+				return NewCOctetStringValue(0)
+			},
+			expected: expected{
+				len: 1,
+				raw: []byte{0},
+				uint32: uint32Result{
+					err: true,
+				},
+			},
+			setting: []setting{
+				{
+					value: "",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "Hello",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 0}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewCOctetStringValue(9)
+			},
+			expected: expected{
+				len: 1,
+				raw: []byte{0},
+				uint32: uint32Result{
+					err: true,
+				},
+			},
+			setting: []setting{
+				{
+					value: "password",
+					ok:    true,
+					expected: expected{
+						len: 9,
+						raw: []byte("password\000"),
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "abc",
+					ok:    true,
+					expected: expected{
+						len: 4,
+						raw: []byte("abc\000"),
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "",
+					ok:    true,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "123456789",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 4, 5},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 4, 5, 0},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 0}),
+					ok:          true,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 5,
+						raw: []byte{1, 2, 3, 4, 0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewFixedCOctetStringValue(0)
+			},
+			expected: expected{
+				len: 1,
+				raw: []byte{0},
+				uint32: uint32Result{
+					err: true,
+				},
+			},
+			setting: []setting{
+				{
+					value: "1",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 4, 5, 0},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 0}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewFixedCOctetStringValue(5)
+			},
+			expected: expected{
+				len: 1,
+				raw: []byte{0},
+				uint32: uint32Result{
+					err: true,
+				},
+			},
+			setting: []setting{
+				{
+					value: "pass",
+					ok:    true,
+					expected: expected{
+						len: 5,
+						raw: []byte("pass\000"),
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "abc",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "",
+					ok:    true,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: "123456789",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 4, 5},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 0},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 0}),
+					ok:          true,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 5,
+						raw: []byte{1, 2, 3, 4, 0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{0}),
+					ok:          true,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewUint8Value()
+			},
+			expected: expected{
+				len: 1,
+				raw: []byte{0},
+				uint32: uint32Result{
+					err:   false,
+					value: 0,
+				},
+			},
+			setting: []setting{
+				{
+					value: []byte{},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: []byte{1},
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: "10",
+					ok:    false,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: uint8(7),
+					ok:    true,
+					expected: expected{
+						len: 1,
+						raw: []byte{7},
+						uint32: uint32Result{
+							err:   false,
+							value: 7,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    true,
+					expected: expected{
+						len: 1,
+						raw: []byte{155},
+						uint32: uint32Result{
+							err:   false,
+							value: 155,
+						},
+					},
+				},
+				{
+					value: 10000,
+					ok:    true,
+					expected: expected{
+						len: 1,
+						raw: []byte{16},
+						uint32: uint32Result{
+							err:   false,
+							value: 16,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 1,
+						raw: []byte{0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          true,
+					lastBuffLen: 3,
+					expected: expected{
+						len: 1,
+						raw: []byte{1},
+						uint32: uint32Result{
+							err:   false,
+							value: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewUint16Value()
+			},
+			expected: expected{
+				len: 2,
+				raw: []byte{0, 0},
+				uint32: uint32Result{
+					err:   false,
+					value: 0,
+				},
+			},
+			setting: []setting{
+				{
+					value: []byte{},
+					ok:    false,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2},
+					ok:    false,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: "10",
+					ok:    false,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: uint16(30000),
+					ok:    true,
+					expected: expected{
+						len: 2,
+						raw: []byte{117, 48},
+						uint32: uint32Result{
+							err:   false,
+							value: 30000,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    true,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 155},
+						uint32: uint32Result{
+							err:   false,
+							value: 155,
+						},
+					},
+				},
+				{
+					value: 100000,
+					ok:    true,
+					expected: expected{
+						len: 2,
+						raw: []byte{134, 160},
+						uint32: uint32Result{
+							err:   false,
+							value: 34464,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          true,
+					lastBuffLen: 2,
+					expected: expected{
+						len: 2,
+						raw: []byte{1, 2},
+						uint32: uint32Result{
+							err:   false,
+							value: 258,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1}),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 2,
+						raw: []byte{0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+			},
+		},
+		{
+			createValue: func() Value {
+				return NewUint32Value()
+			},
+			expected: expected{
+				len: 4,
+				raw: []byte{0, 0, 0, 0},
+				uint32: uint32Result{
+					err:   false,
+					value: 0,
+				},
+			},
+			setting: []setting{
+				{
+					value: []byte{},
+					ok:    false,
+					expected: expected{
+						len: 4,
+						raw: []byte{0, 0, 0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: []byte{1, 2, 3, 4},
+					ok:    false,
+					expected: expected{
+						len: 4,
+						raw: []byte{0, 0, 0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: "10",
+					ok:    false,
+					expected: expected{
+						len: 4,
+						raw: []byte{0, 0, 0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					value: uint32(1000000000),
+					ok:    true,
+					expected: expected{
+						len: 4,
+						raw: []byte{59, 154, 202, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 1000000000,
+						},
+					},
+				},
+				{
+					value: 155,
+					ok:    true,
+					expected: expected{
+						len: 4,
+						raw: []byte{0, 0, 0, 155},
+						uint32: uint32Result{
+							err:   false,
+							value: 155,
+						},
+					},
+				},
+				{
+					value: 1000000000,
+					ok:    true,
+					expected: expected{
+						len: 4,
+						raw: []byte{59, 154, 202, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 1000000000,
+						},
+					},
+				},
+			},
+			deserialization: []deserialization{
+				{
+					buff:        bytes.NewBuffer(nil),
+					ok:          false,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 4,
+						raw: []byte{0, 0, 0, 0},
+						uint32: uint32Result{
+							err:   false,
+							value: 0,
+						},
+					},
+				},
+				{
+					buff:        bytes.NewBuffer([]byte{1, 2, 3, 4}),
+					ok:          true,
+					lastBuffLen: 0,
+					expected: expected{
+						len: 4,
+						raw: []byte{1, 2, 3, 4},
+						uint32: uint32Result{
+							err:   false,
+							value: 16909060,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for i, test := range tests {

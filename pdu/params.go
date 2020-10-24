@@ -557,13 +557,13 @@ func (v *FixedCOctetStringValue) Set(d interface{}) error {
 }
 
 func (v *FixedCOctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	octetStringValue := NewOctetStringValue(v.maxLen)
+	octetStringValue := NewCOctetStringValue(v.maxLen)
 	if err := octetStringValue.Deserialize(buff); err != nil {
 		return err
-	} else if l := len(v.raw); l != 1 || l != v.maxLen {
+	} else if l := len(octetStringValue.raw); l != 1 && l != v.maxLen {
 		return fmt.Errorf("real length %v not equal 1 or %v fixed length", l, v.maxLen)
 	} else {
-		v.OctetStringValue = octetStringValue
+		v.COctetStringValue = octetStringValue
 		return nil
 	}
 }
@@ -653,8 +653,8 @@ type Uint32Value struct {
 	*OctetStringValue
 }
 
-func NewUint32Value() *Uint16Value {
-	return &Uint16Value{OctetStringValue: NewOctetStringValue(4)}
+func NewUint32Value() *Uint32Value {
+	return &Uint32Value{OctetStringValue: NewOctetStringValue(4)}
 }
 
 func (v *Uint32Value) String() string {
