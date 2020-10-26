@@ -1,4 +1,4 @@
-package pdu
+package zkm
 
 import (
 	"encoding/hex"
@@ -18,8 +18,9 @@ func BenchmarkPduDeserialize(b *testing.B) {
 		panic(err)
 	}
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pdu := NewEmpty()
+		pdu := NewEmptyPdu()
 		if err := pdu.Deserialize(raw); err != nil {
 			panic(err)
 		}
@@ -43,7 +44,7 @@ func TestPdu(t *testing.T) {
 	}
 
 	createPdu := func(header header, mandatoryParams mandatoryParams, optionalParams optionalParams) (*Pdu, error) {
-		pdu := New(header.id)
+		pdu := NewPdu(header.id)
 		pdu.Status = header.status
 		pdu.Seq = header.seq
 		for _, p := range mandatoryParams {
@@ -131,7 +132,7 @@ func TestPdu(t *testing.T) {
 		return nil
 	}
 	assert := func(pdu *Pdu, expectedHeader header, expectedMandatoryParams mandatoryParams,
-		expectedOptionalParams optionalParams) error {
+		expectedOptionalParams optionalParams, b []byte) error {
 		if err := assertHeader(pdu, expectedHeader); err != nil {
 			return err
 		}
@@ -142,6 +143,10 @@ func TestPdu(t *testing.T) {
 
 		if err := assertOptionalParams(pdu, expectedOptionalParams); err != nil {
 			return err
+		}
+
+		if !reflect.DeepEqual(pdu.Serialize(), b) {
+			return fmt.Errorf("serialize [%v] not equals expected [%v]", pdu.Serialize(), b)
 		}
 
 		return nil
@@ -420,7 +425,7 @@ func TestPdu(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		pdu := NewEmpty()
+		pdu := NewEmptyPdu()
 		if err := pdu.Deserialize(test.b); (err == nil) != test.ok {
 			t.Errorf("[%v] err [%v] not equals expected [%v] after deserialize", test.id, err, test.ok)
 		}
@@ -429,7 +434,7 @@ func TestPdu(t *testing.T) {
 			continue
 		}
 
-		if err := assert(pdu, test.header, test.mandatoryParams, test.optionalParams); err != nil {
+		if err := assert(pdu, test.header, test.mandatoryParams, test.optionalParams, test.b); err != nil {
 			t.Errorf("[%v] %v after deserialize", test.id, err)
 		}
 
@@ -439,7 +444,7 @@ func TestPdu(t *testing.T) {
 			t.Errorf("[%v] %v", test.id, err)
 		}
 
-		if err := assert(pdu, test.header, test.mandatoryParams, test.optionalParams); err != nil {
+		if err := assert(pdu, test.header, test.mandatoryParams, test.optionalParams, test.b); err != nil {
 			t.Errorf("[%v] %v after create and set", test.id, err)
 		}
 	}

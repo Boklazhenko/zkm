@@ -1,4 +1,4 @@
-package pdu
+package zkm
 
 import (
 	"bytes"
@@ -100,7 +100,7 @@ type Pdu struct {
 	OptionalParams  *OptionalParams
 }
 
-func NewEmpty() *Pdu {
+func NewEmptyPdu() *Pdu {
 	return &Pdu{
 		Id:              0,
 		MandatoryParams: NewMandatoryParams(0),
@@ -108,7 +108,7 @@ func NewEmpty() *Pdu {
 	}
 }
 
-func New(id Id) *Pdu {
+func NewPdu(id Id) *Pdu {
 	return &Pdu{
 		Id:              id,
 		MandatoryParams: NewMandatoryParams(id),
