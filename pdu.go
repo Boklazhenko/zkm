@@ -96,23 +96,23 @@ type Pdu struct {
 	Id              Id
 	Status          Status
 	Seq             uint32
-	MandatoryParams *MandatoryParams
-	OptionalParams  *OptionalParams
+	mandatoryParams *mandatoryParams
+	optionalParams  *optionalParams
 }
 
 func NewEmptyPdu() *Pdu {
 	return &Pdu{
 		Id:              0,
-		MandatoryParams: NewMandatoryParams(0),
-		OptionalParams:  NewOptionalParams(),
+		mandatoryParams: newMandatoryParams(0),
+		optionalParams:  newOptionalParams(),
 	}
 }
 
 func NewPdu(id Id) *Pdu {
 	return &Pdu{
 		Id:              id,
-		MandatoryParams: NewMandatoryParams(id),
-		OptionalParams:  NewOptionalParams(),
+		mandatoryParams: newMandatoryParams(id),
+		optionalParams:  newOptionalParams(),
 	}
 }
 
@@ -167,8 +167,8 @@ func (pdu *Pdu) Serialize() []byte {
 	buff.Write(b)
 	binary.BigEndian.PutUint32(b, pdu.Seq)
 	buff.Write(b)
-	buff.Write(pdu.MandatoryParams.Serialize())
-	buff.Write(pdu.OptionalParams.Serialize())
+	buff.Write(pdu.mandatoryParams.serialize())
+	buff.Write(pdu.optionalParams.serialize())
 	return buff.Bytes()
 }
 
@@ -205,19 +205,97 @@ func (pdu *Pdu) Deserialize(raw []byte) error {
 	}
 	pdu.Seq = binary.BigEndian.Uint32(b)
 
-	pdu.MandatoryParams = NewMandatoryParams(pdu.Id)
+	pdu.mandatoryParams = newMandatoryParams(pdu.Id)
 
-	if err = pdu.MandatoryParams.Deserialize(buff); err != nil {
+	if err = pdu.mandatoryParams.deserialize(buff); err != nil {
 		return err
 	}
 
-	pdu.OptionalParams = NewOptionalParams()
+	pdu.optionalParams = newOptionalParams()
 
-	return pdu.OptionalParams.Deserialize(buff)
+	return pdu.optionalParams.deserialize(buff)
+}
+
+func (pdu *Pdu) SetMandatoryParam(name Name, value interface{}) error {
+	p, err := pdu.mandatoryParams.get(name)
+
+	if err != nil {
+		return err
+	}
+
+	return p.value().set(value)
+}
+
+func (pdu *Pdu) GetMandatoryParamAsRaw(name Name) ([]byte, error) {
+	p, err := pdu.mandatoryParams.get(name)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return p.value().raw(), nil
+}
+
+func (pdu *Pdu) GetMandatoryParamAsString(name Name) (string, error) {
+	p, err := pdu.mandatoryParams.get(name)
+
+	if err != nil {
+		return "", err
+	}
+
+	return p.value().String(), nil
+}
+
+func (pdu *Pdu) GetMandatoryParamAsUint32(name Name) (uint32, error) {
+	p, err := pdu.mandatoryParams.get(name)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return p.value().uint32()
+}
+
+func (pdu *Pdu) SetOptionalParam(tag Tag, value interface{}) error {
+	return pdu.optionalParams.add(tag, value)
+}
+
+func (pdu *Pdu) RemoveOptionalParam(tag Tag) {
+	pdu.optionalParams.remove(tag)
+}
+
+func (pdu *Pdu) GetOptionalParamAsRaw(tag Tag) ([]byte, error) {
+	p, err := pdu.optionalParams.get(tag)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return p.value().raw(), nil
+}
+
+func (pdu *Pdu) GetOptionalParamAsString(tag Tag) (string, error) {
+	p, err := pdu.optionalParams.get(tag)
+
+	if err != nil {
+		return "", err
+	}
+
+	return p.value().String(), nil
+}
+
+func (pdu *Pdu) GetOptionalParamAsUint32(tag Tag) (uint32, error) {
+	p, err := pdu.optionalParams.get(tag)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return p.value().uint32()
 }
 
 func (pdu *Pdu) Len() uint32 {
-	return 4*pduHeaderPartSize + pdu.MandatoryParams.Len() + pdu.OptionalParams.Len()
+	return 4*pduHeaderPartSize + pdu.mandatoryParams.len() + pdu.optionalParams.len()
 }
 
 func (id Id) String() string {

@@ -45,7 +45,7 @@ func TestNewMandatoryParams(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		params := NewMandatoryParams(test.id)
+		params := newMandatoryParams(test.id)
 
 		if !reflect.DeepEqual(test.names, params.names) {
 			t.Errorf("mandatory param names not equal expected for command id [%v]", test.id)
@@ -56,7 +56,7 @@ func TestNewMandatoryParams(t *testing.T) {
 		}
 
 		for _, name := range test.names {
-			if _, err := params.Get(name); err != nil {
+			if _, err := params.get(name); err != nil {
 				t.Errorf("mandatory params for command id [%v] getting error [%v]", test.id, err)
 			}
 		}
@@ -86,14 +86,14 @@ func TestValue(t *testing.T) {
 	}
 
 	tests := []struct {
-		createValue     func() Value
+		createValue     func() value
 		expected        expected
 		setting         []setting
 		deserialization []deserialization
 	}{
 		{
-			createValue: func() Value {
-				return NewOctetStringValue(0)
+			createValue: func() value {
+				return newOctetStringValue(0)
 			},
 			expected: expected{
 				len: 0,
@@ -176,8 +176,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewOctetStringValue(4)
+			createValue: func() value {
+				return newOctetStringValue(4)
 			},
 			expected: expected{
 				len: 4,
@@ -272,8 +272,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewOctetStringValue(200)
+			createValue: func() value {
+				return newOctetStringValue(200)
 			},
 			expected: expected{
 				len: 200,
@@ -379,8 +379,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewCOctetStringValue(0)
+			createValue: func() value {
+				return newCOctetStringValue(0)
 			},
 			expected: expected{
 				len: 1,
@@ -463,8 +463,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewCOctetStringValue(9)
+			createValue: func() value {
+				return newCOctetStringValue(9)
 			},
 			expected: expected{
 				len: 1,
@@ -616,8 +616,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewFixedCOctetStringValue(0)
+			createValue: func() value {
+				return newFixedCOctetStringValue(0)
 			},
 			expected: expected{
 				len: 1,
@@ -723,8 +723,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewFixedCOctetStringValue(5)
+			createValue: func() value {
+				return newFixedCOctetStringValue(5)
 			},
 			expected: expected{
 				len: 1,
@@ -876,8 +876,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewUint8Value()
+			createValue: func() value {
+				return newUint8Value()
 			},
 			expected: expected{
 				len: 1,
@@ -991,8 +991,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewUint16Value()
+			createValue: func() value {
+				return newUint16Value()
 			},
 			expected: expected{
 				len: 2,
@@ -1119,8 +1119,8 @@ func TestValue(t *testing.T) {
 			},
 		},
 		{
-			createValue: func() Value {
-				return NewUint32Value()
+			createValue: func() value {
+				return newUint32Value()
 			},
 			expected: expected{
 				len: 4,
@@ -1238,17 +1238,17 @@ func TestValue(t *testing.T) {
 	for i, test := range tests {
 		value := test.createValue()
 		expected := test.expected
-		if value.Len() != expected.len {
-			t.Errorf("[%v]: len [%v] of value type [%T] not equals expected [%v] after New", i, value.Len(),
+		if value.len() != expected.len {
+			t.Errorf("[%v]: len [%v] of value type [%T] not equals expected [%v] after New", i, value.len(),
 				value, expected.len)
 		}
 
-		if !reflect.DeepEqual(value.Raw(), expected.raw) {
-			t.Errorf("[%v]: raw [%v] of value type [%T] not equals expected [%v] after New", i, value.Raw(),
+		if !reflect.DeepEqual(value.raw(), expected.raw) {
+			t.Errorf("[%v]: raw [%v] of value type [%T] not equals expected [%v] after New", i, value.raw(),
 				value, expected.raw)
 		}
 
-		if v, err := value.Uint32(); (err != nil) != expected.uint32.err {
+		if v, err := value.uint32(); (err != nil) != expected.uint32.err {
 			t.Errorf("[%v]: uint32 err [%v] of value type [%T] not equals expected [%v] after New", i, err,
 				value, expected.uint32.err)
 		} else if !expected.uint32.err && v != expected.uint32.value {
@@ -1259,22 +1259,22 @@ func TestValue(t *testing.T) {
 		for j, setting := range test.setting {
 			value := test.createValue()
 			expected := setting.expected
-			if err := value.Set(setting.value); (err == nil) != setting.ok {
+			if err := value.set(setting.value); (err == nil) != setting.ok {
 				t.Errorf("[%v.%v]: setting error [%v] of value type [%T] not equals expected [%v]", i, j, err,
 					value, setting.ok)
 			}
 
-			if value.Len() != expected.len {
-				t.Errorf("[%v.%v]: len [%v] of value type [%T] not equals expected [%v] after Set", i, j, value.Len(),
+			if value.len() != expected.len {
+				t.Errorf("[%v.%v]: len [%v] of value type [%T] not equals expected [%v] after Set", i, j, value.len(),
 					value, expected.len)
 			}
 
-			if !reflect.DeepEqual(value.Raw(), expected.raw) {
-				t.Errorf("[%v.%v]: raw [%v] of value type [%T] not equals expected [%v] after Set", i, j, value.Raw(),
+			if !reflect.DeepEqual(value.raw(), expected.raw) {
+				t.Errorf("[%v.%v]: raw [%v] of value type [%T] not equals expected [%v] after Set", i, j, value.raw(),
 					value, expected.raw)
 			}
 
-			if v, err := value.Uint32(); (err != nil) != expected.uint32.err {
+			if v, err := value.uint32(); (err != nil) != expected.uint32.err {
 				t.Errorf("[%v.%v]: uint32 err [%v] of value type [%T] not equals expected [%v] after Set", i, j, err,
 					value, expected.uint32.err)
 			} else if !expected.uint32.err && v != expected.uint32.value {
@@ -1286,7 +1286,7 @@ func TestValue(t *testing.T) {
 		for j, deserialization := range test.deserialization {
 			value := test.createValue()
 			expected := deserialization.expected
-			if err := value.Deserialize(deserialization.buff); (err == nil) != deserialization.ok {
+			if err := value.deserialize(deserialization.buff); (err == nil) != deserialization.ok {
 				t.Errorf("[%v.%v]: deserialize error [%v] of value type [%T] not equals expected [%v]", i, j, err,
 					value, deserialization.ok)
 			}
@@ -1296,17 +1296,17 @@ func TestValue(t *testing.T) {
 					deserialization.buff.Len(), deserialization.lastBuffLen)
 			}
 
-			if value.Len() != expected.len {
+			if value.len() != expected.len {
 				t.Errorf("[%v.%v]: len [%v] of value type [%T] not equals expected [%v] after Deserialize", i, j,
-					value.Len(), value, expected.len)
+					value.len(), value, expected.len)
 			}
 
-			if !reflect.DeepEqual(value.Raw(), expected.raw) {
-				t.Errorf("[%v.%v]: raw [%v] of value type [%T] not equals expected [%v] after Deserialize", i, j, value.Raw(),
+			if !reflect.DeepEqual(value.raw(), expected.raw) {
+				t.Errorf("[%v.%v]: raw [%v] of value type [%T] not equals expected [%v] after Deserialize", i, j, value.raw(),
 					value, expected.raw)
 			}
 
-			if v, err := value.Uint32(); (err != nil) != expected.uint32.err {
+			if v, err := value.uint32(); (err != nil) != expected.uint32.err {
 				t.Errorf("[%v.%v]: uint32 err [%v] of value type [%T] not equals expected [%v] after Deseriazlie", i, j, err,
 					value, expected.uint32.err)
 			} else if !expected.uint32.err && v != expected.uint32.value {

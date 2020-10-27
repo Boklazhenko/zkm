@@ -48,15 +48,15 @@ func TestPdu(t *testing.T) {
 		pdu.Status = header.status
 		pdu.Seq = header.seq
 		for _, p := range mandatoryParams {
-			if mp, err := pdu.MandatoryParams.Get(p.name); err != nil {
+			if mp, err := pdu.mandatoryParams.get(p.name); err != nil {
 				return nil, err
 			} else {
-				mp.Value().Set(p.value)
+				mp.value().set(p.value)
 			}
 		}
 
 		for _, p := range optionalParams {
-			if err := pdu.OptionalParams.Add(p.tag, p.value); err != nil {
+			if err := pdu.optionalParams.add(p.tag, p.value); err != nil {
 				return nil, err
 			}
 		}
@@ -85,23 +85,23 @@ func TestPdu(t *testing.T) {
 	}
 	assertMandatoryParams := func(pdu *Pdu, expected mandatoryParams) error {
 		for _, e := range expected {
-			if p, err := pdu.MandatoryParams.Get(e.name); err != nil {
+			if p, err := pdu.mandatoryParams.get(e.name); err != nil {
 				return fmt.Errorf("[%v] %v", e.name, err)
 			} else {
 				equals := false
 				switch v := e.value.(type) {
 				case []byte:
-					equals = reflect.DeepEqual(p.Value().Raw(), v)
+					equals = reflect.DeepEqual(p.value().raw(), v)
 				case string:
-					equals = p.Value().String() == v
+					equals = p.value().String() == v
 				case int:
-					if u, err := p.Value().Uint32(); err == nil {
+					if u, err := p.value().uint32(); err == nil {
 						equals = u == uint32(v)
 					}
 				}
 
 				if !equals {
-					return fmt.Errorf("[%v] value %v not equals expected [%v]", e.name, p.Value(), e.value)
+					return fmt.Errorf("[%v] value %v not equals expected [%v]", e.name, p.value(), e.value)
 				}
 			}
 		}
@@ -109,23 +109,23 @@ func TestPdu(t *testing.T) {
 	}
 	assertOptionalParams := func(pdu *Pdu, expected optionalParams) error {
 		for _, e := range expected {
-			if p, err := pdu.OptionalParams.Get(e.tag); err != nil {
+			if p, err := pdu.optionalParams.get(e.tag); err != nil {
 				return fmt.Errorf("[%v] %v", e.tag, err)
 			} else {
 				equals := false
 				switch v := e.value.(type) {
 				case []byte:
-					equals = reflect.DeepEqual(p.Value().Raw(), v)
+					equals = reflect.DeepEqual(p.value().raw(), v)
 				case string:
-					equals = p.Value().String() == v
+					equals = p.value().String() == v
 				case int:
-					if u, err := p.Value().Uint32(); err == nil {
+					if u, err := p.value().uint32(); err == nil {
 						equals = u == uint32(v)
 					}
 				}
 
 				if !equals {
-					return fmt.Errorf("[%v] value %v not equals expected [%v]", e.tag, p.Value(), e.value)
+					return fmt.Errorf("[%v] value %v not equals expected [%v]", e.tag, p.value(), e.value)
 				}
 			}
 		}

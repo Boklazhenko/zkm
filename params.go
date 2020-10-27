@@ -100,12 +100,12 @@ const (
 	TagItsSessionInfo           Tag = 0x1383
 )
 
-type MandatoryParams struct {
+type mandatoryParams struct {
 	names  []Name
-	params map[Name]*MandatoryParam
+	params map[Name]*mandatoryParam
 }
 
-func NewMandatoryParams(id Id) *MandatoryParams {
+func newMandatoryParams(id Id) *mandatoryParams {
 	names := make([]Name, 0)
 	switch id {
 	case BindReceiver, BindTransceiver, BindTransmitter:
@@ -215,49 +215,49 @@ func NewMandatoryParams(id Id) *MandatoryParams {
 		}
 	}
 
-	params := make(map[Name]*MandatoryParam)
+	params := make(map[Name]*mandatoryParam)
 	for _, n := range names {
-		params[n] = NewMandatoryParam(n)
+		params[n] = newMandatoryParam(n)
 	}
 
-	return &MandatoryParams{names: names, params: params}
+	return &mandatoryParams{names: names, params: params}
 }
 
-func (ps *MandatoryParams) Len() uint32 {
+func (ps *mandatoryParams) len() uint32 {
 	totalLen := 0
 	for _, p := range ps.params {
-		totalLen += p.Value().Len()
+		totalLen += p.value().len()
 	}
 
 	return uint32(totalLen)
 }
 
-func (ps *MandatoryParams) Serialize() []byte {
+func (ps *mandatoryParams) serialize() []byte {
 	buff := bytes.Buffer{}
 	for _, n := range ps.names {
-		buff.Write(ps.params[n].Value().Raw())
+		buff.Write(ps.params[n].value().raw())
 	}
 	return buff.Bytes()
 }
 
-func (ps *MandatoryParams) Deserialize(buff *bytes.Buffer) error {
+func (ps *mandatoryParams) deserialize(buff *bytes.Buffer) error {
 	for _, n := range ps.names {
-		if err := ps.params[n].Value().Deserialize(buff); err != nil {
+		if err := ps.params[n].value().deserialize(buff); err != nil {
 			return err
 		}
 
 		if n == SMLength {
-			smLength, err := ps.params[n].Value().Uint32()
+			smLength, err := ps.params[n].value().uint32()
 			if err != nil {
 				panic(err)
 			}
-			ps.params[ShortMessage].value = NewOctetStringValue(int(smLength))
+			ps.params[ShortMessage].v = newOctetStringValue(int(smLength))
 		}
 	}
 	return nil
 }
 
-func (ps *MandatoryParams) Get(name Name) (*MandatoryParam, error) {
+func (ps *mandatoryParams) get(name Name) (*mandatoryParam, error) {
 	if p, ok := ps.params[name]; ok {
 		return p, nil
 	} else {
@@ -265,58 +265,58 @@ func (ps *MandatoryParams) Get(name Name) (*MandatoryParam, error) {
 	}
 }
 
-type MandatoryParam struct {
-	name  Name
-	value Value
+type mandatoryParam struct {
+	n Name
+	v value
 }
 
-func NewMandatoryParam(name Name) *MandatoryParam {
-	var value Value
+func newMandatoryParam(name Name) *mandatoryParam {
+	var value value
 	switch name {
 	case InterfaceVersion, AddrTON, AddrNPI, SourceAddrTON, SourceAddrNPI, DestAddrTON, DestAddrNPI, EsmeAddrTON,
 		EsmeAddrNPI, ESMClass, ProtocolID, PriorityFlag, RegisteredDelivery, ReplaceIfPresentFlag, DataCoding,
 		SMDefaultMsgID, SMLength, NumberDests, DestFlag, NoUnsuccess, MessageState, ErrorCode:
-		value = NewUint8Value()
+		value = newUint8Value()
 	case ScheduleDeliveryTime, ValidityPeriod, FinalDate:
-		value = NewFixedCOctetStringValue(17)
+		value = newFixedCOctetStringValue(17)
 	case SourceAddr, DestinationAddr, DlName:
-		value = NewCOctetStringValue(21)
+		value = newCOctetStringValue(21)
 	case ShortMessage:
-		value = NewOctetStringValue(0)
+		value = newOctetStringValue(0)
 	case SystemID:
-		value = NewCOctetStringValue(16)
+		value = newCOctetStringValue(16)
 	case Password:
-		value = NewCOctetStringValue(9)
+		value = newCOctetStringValue(9)
 	case SystemType:
-		value = NewCOctetStringValue(13)
+		value = newCOctetStringValue(13)
 	case AddressRange:
-		value = NewCOctetStringValue(41)
+		value = newCOctetStringValue(41)
 	case MessageID, EsmeAddr:
-		value = NewCOctetStringValue(65)
+		value = newCOctetStringValue(65)
 	case ServiceType:
-		value = NewCOctetStringValue(6)
+		value = newCOctetStringValue(6)
 	default:
-		value = NewOctetStringValue(0)
+		value = newOctetStringValue(0)
 	}
 
-	return &MandatoryParam{name: name, value: value}
+	return &mandatoryParam{n: name, v: value}
 }
 
-func (p *MandatoryParam) String() string {
-	return fmt.Sprintf("%v: %v", p.name, p.value)
+func (p *mandatoryParam) String() string {
+	return fmt.Sprintf("%v: %v", p.n, p.v)
 }
 
-func (p *MandatoryParam) Name() Name {
-	return p.name
+func (p *mandatoryParam) name() Name {
+	return p.n
 }
 
-func (p *MandatoryParam) Value() Value {
-	return p.value
+func (p *mandatoryParam) value() value {
+	return p.v
 }
 
-type OptionalParam struct {
-	tag   Tag
-	value Value
+type optionalParam struct {
+	t Tag
+	v value
 }
 
 func min(a, b uint16) uint16 {
@@ -327,37 +327,37 @@ func min(a, b uint16) uint16 {
 	}
 }
 
-type OptionalParams struct {
-	params map[Tag]*OptionalParam
+type optionalParams struct {
+	params map[Tag]*optionalParam
 }
 
-func NewOptionalParams() *OptionalParams {
-	return &OptionalParams{params: make(map[Tag]*OptionalParam)}
+func newOptionalParams() *optionalParams {
+	return &optionalParams{params: make(map[Tag]*optionalParam)}
 }
 
-func (ps *OptionalParams) Len() uint32 {
+func (ps *optionalParams) len() uint32 {
 	totalLen := 0
 	for _, p := range ps.params {
-		totalLen += p.Len()
+		totalLen += p.len()
 	}
 
 	return uint32(totalLen)
 }
 
-func (ps *OptionalParams) Serialize() []byte {
+func (ps *optionalParams) serialize() []byte {
 	buff := bytes.Buffer{}
 	b := make([]byte, 2)
 	for _, p := range ps.params {
-		binary.BigEndian.PutUint16(b, uint16(p.tag))
+		binary.BigEndian.PutUint16(b, uint16(p.t))
 		buff.Write(b)
-		binary.BigEndian.PutUint16(b, uint16(p.Value().Len()))
+		binary.BigEndian.PutUint16(b, uint16(p.value().len()))
 		buff.Write(b)
-		buff.Write(p.Value().Raw())
+		buff.Write(p.value().raw())
 	}
 	return buff.Bytes()
 }
 
-func (ps *OptionalParams) Deserialize(buff *bytes.Buffer) error {
+func (ps *optionalParams) deserialize(buff *bytes.Buffer) error {
 	for buff.Len() > 0 {
 		b := make([]byte, 4)
 		n, err := buff.Read(b)
@@ -371,14 +371,14 @@ func (ps *OptionalParams) Deserialize(buff *bytes.Buffer) error {
 
 		tag := Tag(binary.BigEndian.Uint16(b[:2]))
 		l := binary.BigEndian.Uint16(b[2:])
-		optParam := NewOptionalParam(tag, l)
+		optParam := newOptionalParam(tag, l)
 
-		if err = optParam.Value().Deserialize(buff); err != nil {
+		if err = optParam.value().deserialize(buff); err != nil {
 			return err
 		}
 
-		if l != uint16(optParam.Value().Len()) {
-			return fmt.Errorf("bad optional param: len %v, real len %v", l, optParam.Value().Len())
+		if l != uint16(optParam.value().len()) {
+			return fmt.Errorf("bad optional param: len %v, real len %v", l, optParam.value().len())
 		}
 
 		ps.params[tag] = optParam
@@ -387,7 +387,7 @@ func (ps *OptionalParams) Deserialize(buff *bytes.Buffer) error {
 	return nil
 }
 
-func (ps *OptionalParams) Get(tag Tag) (*OptionalParam, error) {
+func (ps *optionalParams) get(tag Tag) (*optionalParam, error) {
 	if p, ok := ps.params[tag]; ok {
 		return p, nil
 	} else {
@@ -395,93 +395,97 @@ func (ps *OptionalParams) Get(tag Tag) (*OptionalParam, error) {
 	}
 }
 
-func (ps *OptionalParams) Add(tag Tag, d interface{}) error {
-	p := NewOptionalParam(tag, 0)
-	if err := p.Value().Set(d); err != nil {
+func (ps *optionalParams) add(tag Tag, d interface{}) error {
+	p := newOptionalParam(tag, 0)
+	if err := p.value().set(d); err != nil {
 		return err
 	}
 	ps.params[tag] = p
 	return nil
 }
 
-func NewOptionalParam(tag Tag, len uint16) *OptionalParam {
-	var value Value
+func (ps *optionalParams) remove(tag Tag) {
+	delete(ps.params, tag)
+}
+
+func newOptionalParam(tag Tag, len uint16) *optionalParam {
+	var value value
 	switch tag {
 	case TagDestAddrSubunit, TagDestNetworkType, TagSourceNetworkType, TagDestBearerType, TagSourceBearerType,
 		TagSourceAddrSubunit, TagSourceTelematicsID, TagPayloadType, TagMsMsgWaitFacilities, TagPrivacyIndicator,
 		TagUserResponseCode, TagLanguageIndicator, TagSarTotalSegments, TagSarSegmentSeqnum, TagScInterfaceVersion,
 		TagDisplayTime, TagMsValidity, TagDpfResult, TagSetDpf, TagMsAvailabilityStatus, TagDeliveryFailureReason,
 		TagMoreMessagesToSend, TagMessageStateOption, TagCallbackNumPresInd, TagNumberOfMessages, TagItsReplyType, TagUssdServiceOp:
-		value = NewUint8Value()
+		value = newUint8Value()
 	case TagDestTelematicsID, TagUserMessageReference, TagSourcePort, TagDestinationPort,
 		TagSarMsgRefNum, TagSmsSignal, TagItsSessionInfo:
-		value = NewUint16Value()
+		value = newUint16Value()
 	case TagQosTimeToLive:
-		value = NewUint32Value()
+		value = newUint32Value()
 	case TagAdditionalStatusInfoText:
-		value = NewCOctetStringValue(256)
+		value = newCOctetStringValue(256)
 	case TagReceiptedMessageID:
-		value = NewCOctetStringValue(65)
+		value = newCOctetStringValue(65)
 	case TagSourceSubaddress, TagDestSubaddress:
-		value = NewOctetStringValue(int(min(23, len)))
+		value = newOctetStringValue(int(min(23, len)))
 	case TagNetworkErrorCode:
-		value = NewOctetStringValue(3)
+		value = newOctetStringValue(3)
 	case TagMessagePayload:
-		value = NewOctetStringValue(int(min(math.MaxUint16, len)))
+		value = newOctetStringValue(int(min(math.MaxUint16, len)))
 	case TagCallbackNum:
-		value = NewOctetStringValue(int(min(19, len)))
+		value = newOctetStringValue(int(min(19, len)))
 	default:
-		value = NewOctetStringValue(0)
+		value = newOctetStringValue(0)
 	}
 
-	return &OptionalParam{tag: tag, value: value}
+	return &optionalParam{t: tag, v: value}
 }
 
-func (p *OptionalParam) String() string {
-	return fmt.Sprintf("%v: %v", p.tag, p.value)
+func (p *optionalParam) String() string {
+	return fmt.Sprintf("%v: %v", p.t, p.v)
 }
 
-func (p *OptionalParam) Tag() Tag {
-	return p.tag
+func (p *optionalParam) tag() Tag {
+	return p.t
 }
 
-func (p *OptionalParam) Len() int {
-	return 4 + p.value.Len()
+func (p *optionalParam) len() int {
+	return 4 + p.v.len()
 }
 
-func (p *OptionalParam) Value() Value {
-	return p.value
+func (p *optionalParam) value() value {
+	return p.v
 }
 
-type Value interface {
+type value interface {
 	fmt.Stringer
-	Len() int
-	Set(d interface{}) error
-	Deserialize(buff *bytes.Buffer) error
-	Raw() []byte
-	Uint32() (uint32, error)
+	len() int
+	set(d interface{}) error
+	deserialize(buff *bytes.Buffer) error
+	raw() []byte
+	uint32() (uint32, error)
 }
 
-type OctetStringValue struct {
-	raw []byte
+type octetStringValue struct {
+	r []byte
 }
 
-func NewOctetStringValue(len int) *OctetStringValue {
-	return &OctetStringValue{raw: make([]byte, len)}
+func newOctetStringValue(len int) *octetStringValue {
+	return &octetStringValue{r: make([]byte, len)}
 }
 
-func (v *OctetStringValue) String() string {
-	return fmt.Sprintf("%v", v.raw)
+func (v *octetStringValue) String() string {
+	return fmt.Sprintf("%v", v.r)
 }
 
-func (v *OctetStringValue) Len() int {
-	return len(v.raw)
+func (v *octetStringValue) len() int {
+	return len(v.r)
 }
 
-func (v *OctetStringValue) Set(d interface{}) error {
+func (v *octetStringValue) set(d interface{}) error {
 	switch data := d.(type) {
 	case []byte:
-		v.raw = data
+		v.r = data
 	default:
 		return paramBadType
 	}
@@ -489,37 +493,37 @@ func (v *OctetStringValue) Set(d interface{}) error {
 	return nil
 }
 
-func (v *OctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	b := make([]byte, v.Len())
-	if n, _ := buff.Read(b); n == v.Len() {
-		v.raw = b
+func (v *octetStringValue) deserialize(buff *bytes.Buffer) error {
+	b := make([]byte, v.len())
+	if n, _ := buff.Read(b); n == v.len() {
+		v.r = b
 		return nil
 	} else {
-		return fmt.Errorf("readed %v bytes, need %v", n, len(v.raw))
+		return fmt.Errorf("readed %v bytes, need %v", n, len(v.r))
 	}
 }
 
-func (v *OctetStringValue) Raw() []byte {
-	return v.raw
+func (v *octetStringValue) raw() []byte {
+	return v.r
 }
 
-func (v *OctetStringValue) Uint32() (uint32, error) {
+func (v *octetStringValue) uint32() (uint32, error) {
 	return 0, paramBadType
 }
 
-type COctetStringValue struct {
-	*OctetStringValue
+type cOctetStringValue struct {
+	*octetStringValue
 	maxLen int
 }
 
-func (v *COctetStringValue) String() string {
-	return string(v.raw[:len(v.raw)-1])
+func (v *cOctetStringValue) String() string {
+	return string(v.r[:len(v.r)-1])
 }
 
-func (v *COctetStringValue) Set(d interface{}) error {
+func (v *cOctetStringValue) set(d interface{}) error {
 	switch data := d.(type) {
 	case string:
-		if err := v.Deserialize(bytes.NewBuffer(append([]byte(data), 0))); err != nil {
+		if err := v.deserialize(bytes.NewBuffer(append([]byte(data), 0))); err != nil {
 			return err
 		}
 	default:
@@ -529,33 +533,33 @@ func (v *COctetStringValue) Set(d interface{}) error {
 	return nil
 }
 
-func (v *COctetStringValue) Deserialize(buff *bytes.Buffer) error {
+func (v *cOctetStringValue) deserialize(buff *bytes.Buffer) error {
 	if b, err := buff.ReadBytes(0x00); err != nil {
 		return err
 	} else if len(b) > v.maxLen {
-		return fmt.Errorf("real length %v exceeded the maximum length %v", len(v.raw), v.maxLen)
+		return fmt.Errorf("real length %v exceeded the maximum length %v", len(v.r), v.maxLen)
 	} else {
-		v.raw = b
+		v.r = b
 		return nil
 	}
 }
 
-func NewCOctetStringValue(maxLen int) *COctetStringValue {
-	return &COctetStringValue{OctetStringValue: NewOctetStringValue(1), maxLen: maxLen}
+func newCOctetStringValue(maxLen int) *cOctetStringValue {
+	return &cOctetStringValue{octetStringValue: newOctetStringValue(1), maxLen: maxLen}
 }
 
-type FixedCOctetStringValue struct {
-	*COctetStringValue
+type fixedCOctetStringValue struct {
+	*cOctetStringValue
 }
 
-func NewFixedCOctetStringValue(len int) *FixedCOctetStringValue {
-	return &FixedCOctetStringValue{COctetStringValue: NewCOctetStringValue(len)}
+func newFixedCOctetStringValue(len int) *fixedCOctetStringValue {
+	return &fixedCOctetStringValue{cOctetStringValue: newCOctetStringValue(len)}
 }
 
-func (v *FixedCOctetStringValue) Set(d interface{}) error {
+func (v *fixedCOctetStringValue) set(d interface{}) error {
 	switch data := d.(type) {
 	case string:
-		if err := v.Deserialize(bytes.NewBuffer(append([]byte(data), 0))); err != nil {
+		if err := v.deserialize(bytes.NewBuffer(append([]byte(data), 0))); err != nil {
 			return err
 		}
 	default:
@@ -565,36 +569,36 @@ func (v *FixedCOctetStringValue) Set(d interface{}) error {
 	return nil
 }
 
-func (v *FixedCOctetStringValue) Deserialize(buff *bytes.Buffer) error {
-	octetStringValue := NewCOctetStringValue(v.maxLen)
-	if err := octetStringValue.Deserialize(buff); err != nil {
+func (v *fixedCOctetStringValue) deserialize(buff *bytes.Buffer) error {
+	octetStringValue := newCOctetStringValue(v.maxLen)
+	if err := octetStringValue.deserialize(buff); err != nil {
 		return err
-	} else if l := len(octetStringValue.raw); l != 1 && l != v.maxLen {
+	} else if l := len(octetStringValue.r); l != 1 && l != v.maxLen {
 		return fmt.Errorf("real length %v not equal 1 or %v fixed length", l, v.maxLen)
 	} else {
-		v.COctetStringValue = octetStringValue
+		v.cOctetStringValue = octetStringValue
 		return nil
 	}
 }
 
-type Uint8Value struct {
-	*OctetStringValue
+type uint8Value struct {
+	*octetStringValue
 }
 
-func NewUint8Value() *Uint8Value {
-	return &Uint8Value{OctetStringValue: NewOctetStringValue(1)}
+func newUint8Value() *uint8Value {
+	return &uint8Value{octetStringValue: newOctetStringValue(1)}
 }
 
-func (v *Uint8Value) String() string {
-	return fmt.Sprintf("%v", v.raw[0])
+func (v *uint8Value) String() string {
+	return fmt.Sprintf("%v", v.r[0])
 }
 
-func (v *Uint8Value) Set(d interface{}) error {
+func (v *uint8Value) set(d interface{}) error {
 	switch data := d.(type) {
 	case uint8:
-		v.raw[0] = data
+		v.r[0] = data
 	case int:
-		v.raw[0] = uint8(data)
+		v.r[0] = uint8(data)
 	default:
 		return paramBadType
 	}
@@ -602,39 +606,39 @@ func (v *Uint8Value) Set(d interface{}) error {
 	return nil
 }
 
-func (v *Uint8Value) Deserialize(buff *bytes.Buffer) error {
+func (v *uint8Value) deserialize(buff *bytes.Buffer) error {
 	if b, err := buff.ReadByte(); err != nil {
 		return err
 	} else {
-		v.raw[0] = b
+		v.r[0] = b
 		return nil
 	}
 }
 
-func (v *Uint8Value) Uint32() (uint32, error) {
-	return uint32(v.raw[0]), nil
+func (v *uint8Value) uint32() (uint32, error) {
+	return uint32(v.r[0]), nil
 }
 
-type Uint16Value struct {
-	*OctetStringValue
+type uint16Value struct {
+	*octetStringValue
 }
 
-func NewUint16Value() *Uint16Value {
-	return &Uint16Value{OctetStringValue: NewOctetStringValue(2)}
+func newUint16Value() *uint16Value {
+	return &uint16Value{octetStringValue: newOctetStringValue(2)}
 }
 
-func (v *Uint16Value) String() string {
-	return fmt.Sprintf("%v", binary.BigEndian.Uint16(v.raw))
+func (v *uint16Value) String() string {
+	return fmt.Sprintf("%v", binary.BigEndian.Uint16(v.r))
 }
 
-func (v *Uint16Value) Set(d interface{}) error {
+func (v *uint16Value) set(d interface{}) error {
 	switch data := d.(type) {
 	case uint8:
-		binary.BigEndian.PutUint16(v.raw, uint16(data))
+		binary.BigEndian.PutUint16(v.r, uint16(data))
 	case uint16:
-		binary.BigEndian.PutUint16(v.raw, data)
+		binary.BigEndian.PutUint16(v.r, data)
 	case int:
-		binary.BigEndian.PutUint16(v.raw, uint16(data))
+		binary.BigEndian.PutUint16(v.r, uint16(data))
 	default:
 		return paramBadType
 	}
@@ -642,44 +646,44 @@ func (v *Uint16Value) Set(d interface{}) error {
 	return nil
 }
 
-func (v *Uint16Value) Deserialize(buff *bytes.Buffer) error {
-	b := make([]byte, v.Len())
+func (v *uint16Value) deserialize(buff *bytes.Buffer) error {
+	b := make([]byte, v.len())
 	if n, err := buff.Read(b); n != len(b) {
 		return fmt.Errorf("readed %v bytes, need %v", n, len(b))
 	} else if err != nil {
 		return err
 	} else {
-		v.raw = b
+		v.r = b
 		return nil
 	}
 }
 
-func (v *Uint16Value) Uint32() (uint32, error) {
-	return uint32(binary.BigEndian.Uint16(v.raw)), nil
+func (v *uint16Value) uint32() (uint32, error) {
+	return uint32(binary.BigEndian.Uint16(v.r)), nil
 }
 
-type Uint32Value struct {
-	*OctetStringValue
+type uint32Value struct {
+	*octetStringValue
 }
 
-func NewUint32Value() *Uint32Value {
-	return &Uint32Value{OctetStringValue: NewOctetStringValue(4)}
+func newUint32Value() *uint32Value {
+	return &uint32Value{octetStringValue: newOctetStringValue(4)}
 }
 
-func (v *Uint32Value) String() string {
-	return fmt.Sprintf("%v", binary.BigEndian.Uint32(v.raw))
+func (v *uint32Value) String() string {
+	return fmt.Sprintf("%v", binary.BigEndian.Uint32(v.r))
 }
 
-func (v *Uint32Value) Set(d interface{}) error {
+func (v *uint32Value) set(d interface{}) error {
 	switch data := d.(type) {
 	case uint32:
-		binary.BigEndian.PutUint32(v.raw, data)
+		binary.BigEndian.PutUint32(v.r, data)
 	case uint8:
-		binary.BigEndian.PutUint32(v.raw, uint32(data))
+		binary.BigEndian.PutUint32(v.r, uint32(data))
 	case uint16:
-		binary.BigEndian.PutUint32(v.raw, uint32(data))
+		binary.BigEndian.PutUint32(v.r, uint32(data))
 	case int:
-		binary.BigEndian.PutUint32(v.raw, uint32(data))
+		binary.BigEndian.PutUint32(v.r, uint32(data))
 	default:
 		return paramBadType
 	}
@@ -687,20 +691,20 @@ func (v *Uint32Value) Set(d interface{}) error {
 	return nil
 }
 
-func (v *Uint32Value) Deserialize(buff *bytes.Buffer) error {
-	b := make([]byte, v.Len())
+func (v *uint32Value) deserialize(buff *bytes.Buffer) error {
+	b := make([]byte, v.len())
 	if n, err := buff.Read(b); n != len(b) {
 		return fmt.Errorf("readed %v bytes, need %v", n, len(b))
 	} else if err != nil {
 		return err
 	} else {
-		v.raw = b
+		v.r = b
 		return nil
 	}
 }
 
-func (v *Uint32Value) Uint32() (uint32, error) {
-	return binary.BigEndian.Uint32(v.raw), nil
+func (v *uint32Value) uint32() (uint32, error) {
+	return binary.BigEndian.Uint32(v.r), nil
 }
 
 func (t Tag) String() string {

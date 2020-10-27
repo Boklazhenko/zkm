@@ -14,14 +14,14 @@ const chanBuffSize = 10000
 
 var ErrTimeout = errors.New("timeout wait for response")
 
-type Req struct {
-	Pdu    *Pdu
-	RespCh chan *Resp
+type req struct {
+	pdu    *Pdu
+	respCh chan *Resp
 	j      *gocron.Job
 }
 
-func NewReq(pdu *Pdu) *Req {
-	return &Req{Pdu: pdu, RespCh: make(chan *Resp, 1)}
+func newReq(pdu *Pdu) *req {
+	return &req{pdu: pdu, respCh: make(chan *Resp, 1)}
 }
 
 type Resp struct {
@@ -33,7 +33,7 @@ type Session struct {
 	sock                   *sock
 	scheduler              *gocron.Scheduler
 	inPduCh                chan *Pdu
-	outReqCh               chan *Req
+	outReqCh               chan *req
 	outRespCh              chan *Pdu
 	closed                 chan struct{}
 	rpsLimit               int32
@@ -48,7 +48,7 @@ func NewSession(conn net.Conn) *Session {
 		sock:                   newSock(conn),
 		scheduler:              gocron.NewScheduler(time.UTC),
 		inPduCh:                make(chan *Pdu, chanBuffSize),
-		outReqCh:               make(chan *Req),
+		outReqCh:               make(chan *req),
 		outRespCh:              make(chan *Pdu, chanBuffSize),
 		closed:                 make(chan struct{}),
 		rpsLimit:               1,
@@ -61,10 +61,10 @@ func NewSession(conn net.Conn) *Session {
 	s.scheduler.StartAsync()
 
 	outWinSema := make(chan struct{}, 1)
-	outEnquireLinkReqCh := make(chan *Req, 1)
+	outEnquireLinkReqCh := make(chan *req, 1)
 	var outWin int32
 	var inWin int32
-	reqsInFlight := make(map[uint32]*Req)
+	reqsInFlight := make(map[uint32]*req)
 	var lastThrottle time.Time
 	lastReading := time.Now().Unix()
 	mu := sync.Mutex{}
@@ -79,7 +79,7 @@ func NewSession(conn net.Conn) *Session {
 			}
 		} else if silenceIntervalSec > enquireLinkIntervalSec {
 			select {
-			case outEnquireLinkReqCh <- NewReq(NewPdu(EnquireLink)):
+			case outEnquireLinkReqCh <- newReq(NewPdu(EnquireLink)):
 			default:
 			}
 		}
@@ -117,11 +117,11 @@ func NewSession(conn net.Conn) *Session {
 		var sentReqs int32
 		var seq uint32
 
-		handleReq := func(r *Req) {
+		handleReq := func(r *req) {
 			seq++
-			r.Pdu.Seq = seq
+			r.pdu.Seq = seq
 
-			err := s.sock.write(r.Pdu)
+			err := s.sock.write(r.pdu)
 
 			if err != nil {
 				//TODO ...
@@ -167,7 +167,7 @@ func NewSession(conn net.Conn) *Session {
 						}
 					}
 
-					req.RespCh <- &Resp{
+					req.respCh <- &Resp{
 						Err: ErrTimeout,
 					}
 					delete(reqsInFlight, _seq)
@@ -283,7 +283,7 @@ func NewSession(conn net.Conn) *Session {
 							}
 						}
 
-						req.RespCh <- &Resp{
+						req.respCh <- &Resp{
 							Pdu: pdu,
 						}
 						delete(reqsInFlight, pdu.Seq)
@@ -298,14 +298,16 @@ func NewSession(conn net.Conn) *Session {
 	return s
 }
 
-func (s *Session) SendReq(req *Req) {
-	if req.Pdu.IsReq() {
+func (s *Session) SendReq(pdu *Pdu) <-chan *Resp {
+	req := newReq(pdu)
+	if req.pdu.IsReq() {
 		s.outReqCh <- req
 	} else {
-		req.RespCh <- &Resp{
-			Err: fmt.Errorf("cmd id [%v] is not request", req.Pdu.Id),
+		req.respCh <- &Resp{
+			Err: fmt.Errorf("cmd id [%v] is not request", req.pdu.Id),
 		}
 	}
+	return req.respCh
 }
 
 func (s *Session) SendResp(pdu *Pdu) {
