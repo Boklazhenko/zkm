@@ -216,7 +216,7 @@ func (pdu *Pdu) Deserialize(raw []byte) error {
 	return pdu.optionalParams.deserialize(buff)
 }
 
-func (pdu *Pdu) SetMandatoryParam(name Name, value interface{}) error {
+func (pdu *Pdu) SetMain(name Name, value interface{}) error {
 	p, err := pdu.mandatoryParams.get(name)
 
 	if err != nil {
@@ -226,7 +226,7 @@ func (pdu *Pdu) SetMandatoryParam(name Name, value interface{}) error {
 	return p.value().set(value)
 }
 
-func (pdu *Pdu) GetMandatoryParamAsRaw(name Name) ([]byte, error) {
+func (pdu *Pdu) GetMainAsRaw(name Name) ([]byte, error) {
 	p, err := pdu.mandatoryParams.get(name)
 
 	if err != nil {
@@ -236,7 +236,7 @@ func (pdu *Pdu) GetMandatoryParamAsRaw(name Name) ([]byte, error) {
 	return p.value().raw(), nil
 }
 
-func (pdu *Pdu) GetMandatoryParamAsString(name Name) (string, error) {
+func (pdu *Pdu) GetMainAsString(name Name) (string, error) {
 	p, err := pdu.mandatoryParams.get(name)
 
 	if err != nil {
@@ -246,7 +246,7 @@ func (pdu *Pdu) GetMandatoryParamAsString(name Name) (string, error) {
 	return p.value().String(), nil
 }
 
-func (pdu *Pdu) GetMandatoryParamAsUint32(name Name) (uint32, error) {
+func (pdu *Pdu) GetMainAsUint32(name Name) (uint32, error) {
 	p, err := pdu.mandatoryParams.get(name)
 
 	if err != nil {
@@ -256,15 +256,15 @@ func (pdu *Pdu) GetMandatoryParamAsUint32(name Name) (uint32, error) {
 	return p.value().uint32()
 }
 
-func (pdu *Pdu) SetOptionalParam(tag Tag, value interface{}) error {
+func (pdu *Pdu) SetOpt(tag Tag, value interface{}) error {
 	return pdu.optionalParams.add(tag, value)
 }
 
-func (pdu *Pdu) RemoveOptionalParam(tag Tag) {
+func (pdu *Pdu) RemoveOpt(tag Tag) {
 	pdu.optionalParams.remove(tag)
 }
 
-func (pdu *Pdu) GetOptionalParamAsRaw(tag Tag) ([]byte, error) {
+func (pdu *Pdu) GetOptAsRaw(tag Tag) ([]byte, error) {
 	p, err := pdu.optionalParams.get(tag)
 
 	if err != nil {
@@ -274,7 +274,7 @@ func (pdu *Pdu) GetOptionalParamAsRaw(tag Tag) ([]byte, error) {
 	return p.value().raw(), nil
 }
 
-func (pdu *Pdu) GetOptionalParamAsString(tag Tag) (string, error) {
+func (pdu *Pdu) GetOptAsString(tag Tag) (string, error) {
 	p, err := pdu.optionalParams.get(tag)
 
 	if err != nil {
@@ -284,7 +284,7 @@ func (pdu *Pdu) GetOptionalParamAsString(tag Tag) (string, error) {
 	return p.value().String(), nil
 }
 
-func (pdu *Pdu) GetOptionalParamAsUint32(tag Tag) (uint32, error) {
+func (pdu *Pdu) GetOptAsUint32(tag Tag) (uint32, error) {
 	p, err := pdu.optionalParams.get(tag)
 
 	if err != nil {
