@@ -168,7 +168,7 @@ func NewSession(conn net.Conn) *Session {
 					}
 
 					req.RespCh <- &Resp{
-						err: ErrTimeout,
+						Err: ErrTimeout,
 					}
 					delete(reqsInFlight, _seq)
 				} else {
@@ -284,7 +284,7 @@ func NewSession(conn net.Conn) *Session {
 						}
 
 						req.RespCh <- &Resp{
-							pdu: pdu,
+							Pdu: pdu,
 						}
 						delete(reqsInFlight, pdu.Seq)
 					} else {
@@ -303,7 +303,7 @@ func (s *Session) SendReq(req *Req) {
 		s.outReqCh <- req
 	} else {
 		req.RespCh <- &Resp{
-			err: fmt.Errorf("cmd id [%v] is not request", req.Pdu.Id),
+			Err: fmt.Errorf("cmd id [%v] is not request", req.Pdu.Id),
 		}
 	}
 }
