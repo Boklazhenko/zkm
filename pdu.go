@@ -116,6 +116,46 @@ func NewPdu(id Id) *Pdu {
 	}
 }
 
+func (pdu *Pdu) IsReq() bool {
+	return pdu.Id&0x80000000 == 0
+}
+
+func (pdu *Pdu) CreateResp(status Status) (*Pdu, error) {
+	var resp *Pdu
+	switch pdu.Id {
+	case BindReceiver:
+		resp = NewPdu(BindReceiverResp)
+	case BindTransmitter:
+		resp = NewPdu(BindTransmitterResp)
+	case QuerySm:
+		resp = NewPdu(QuerySmResp)
+	case SubmitSm:
+		resp = NewPdu(SubmitSmResp)
+	case DeliverSm:
+		resp = NewPdu(DeliverSmResp)
+	case Unbind:
+		resp = NewPdu(UnbindResp)
+	case ReplaceSm:
+		resp = NewPdu(ReplaceSmResp)
+	case CancelSm:
+		resp = NewPdu(CancelSmResp)
+	case BindTransceiver:
+		resp = NewPdu(BindTransceiverResp)
+	case EnquireLink:
+		resp = NewPdu(EnquireLinkResp)
+	case SubmitMulti:
+		resp = NewPdu(SubmitMultiResp)
+	case DataSm:
+		resp = NewPdu(DataSmResp)
+	default:
+		return nil, fmt.Errorf("cann't create resp for cmd id [%v]", pdu.Id)
+	}
+
+	resp.Seq = pdu.Seq
+	resp.Status = status
+	return resp, nil
+}
+
 func (pdu *Pdu) Serialize() []byte {
 	buff := bytes.Buffer{}
 	b := make([]byte, pduHeaderPartSize)
