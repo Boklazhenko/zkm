@@ -116,6 +116,10 @@ func NewPdu(id Id) *Pdu {
 	}
 }
 
+func (pdu *Pdu) String() string {
+	return fmt.Sprintf("id:%v status:%v seq:%v", pdu.Id, pdu.Status, pdu.Seq)
+}
+
 func (pdu *Pdu) IsReq() bool {
 	return pdu.Id&0x80000000 == 0
 }

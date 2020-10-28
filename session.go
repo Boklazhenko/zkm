@@ -29,10 +29,53 @@ type Resp struct {
 	Pdu *Pdu
 }
 
+type Evt interface {
+	fmt.Stringer
+}
+
+type Severity int8
+
+const (
+	Debug Severity = iota
+	Info
+	Warning
+	Error
+)
+
+type LogEvt struct {
+	severity Severity
+	msg      string
+}
+
+func (e *LogEvt) Severity() Severity {
+	return e.severity
+}
+
+func (e *LogEvt) Msg() string {
+	return e.msg
+}
+
+func (e *LogEvt) String() string {
+	return e.msg
+}
+
+type ErrEvt struct {
+	err error
+}
+
+func (e *ErrEvt) String() string {
+	return e.err.Error()
+}
+
+func (e *ErrEvt) Err() error {
+	return e.err
+}
+
 type Session struct {
 	sock                   *sock
 	scheduler              *gocron.Scheduler
 	inPduCh                chan *Pdu
+	evtCh                  chan Evt
 	outReqCh               chan *req
 	outRespCh              chan *Pdu
 	closed                 chan struct{}
@@ -41,6 +84,7 @@ type Session struct {
 	throttlePauseSec       int32
 	reqTimeoutSec          int32
 	enquireLinkIntervalSec int64
+	logSeverity            Severity
 }
 
 func NewSession(conn net.Conn) *Session {
@@ -48,6 +92,7 @@ func NewSession(conn net.Conn) *Session {
 		sock:                   newSock(conn),
 		scheduler:              gocron.NewScheduler(time.UTC),
 		inPduCh:                make(chan *Pdu, chanBuffSize),
+		evtCh:                  make(chan Evt, chanBuffSize),
 		outReqCh:               make(chan *req),
 		outRespCh:              make(chan *Pdu, chanBuffSize),
 		closed:                 make(chan struct{}),
@@ -56,6 +101,7 @@ func NewSession(conn net.Conn) *Session {
 		throttlePauseSec:       1,
 		reqTimeoutSec:          2,
 		enquireLinkIntervalSec: 15,
+		logSeverity:            Info,
 	}
 
 	s.scheduler.StartAsync()
@@ -72,22 +118,22 @@ func NewSession(conn net.Conn) *Session {
 	if _, err := s.scheduler.Every(uint64(s.enquireLinkIntervalSec)).Seconds().Do(func() {
 		silenceIntervalSec := time.Now().Unix() - atomic.LoadInt64(&lastReading)
 		enquireLinkIntervalSec := atomic.LoadInt64(&s.enquireLinkIntervalSec)
-		if silenceIntervalSec > 2*enquireLinkIntervalSec {
-			//TODO ...
+		if silenceIntervalSec >= 2*enquireLinkIntervalSec {
+			s.logEvt(Warning, fmt.Sprintf("silence interval [%v] exceeded two enquireLinkInterval [%v]. Socket closing...",
+				silenceIntervalSec, enquireLinkIntervalSec))
 			if err := s.sock.close(); err != nil {
-				//TODO ...
+				s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
+				s.errEvt(err)
 			}
-		} else if silenceIntervalSec > enquireLinkIntervalSec {
+		} else if silenceIntervalSec >= enquireLinkIntervalSec {
 			select {
 			case outEnquireLinkReqCh <- newReq(NewPdu(EnquireLink)):
 			default:
 			}
 		}
 	}); err != nil {
-		//TODO ...
-		if err := s.sock.close(); err != nil {
-			//TODO ...
-		}
+		s.logEvt(Error, fmt.Sprintf("[]can't scheduling periodically enquireLink job: [%v]", err))
+		s.errEvt(err)
 	}
 
 	//handling outgoing responses
@@ -98,14 +144,15 @@ func NewSession(conn net.Conn) *Session {
 				err := s.sock.write(r)
 
 				if err != nil {
-					//TODO ...
-					if err := s.sock.close(); err != nil {
-						//TODO ...
-					}
+					s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r, err))
+					s.errEvt(err)
+				} else {
+					s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r))
 				}
 
 				atomic.AddInt32(&inWin, -1)
 			case <-s.closed:
+				s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
 				return
 			}
 		}
@@ -124,10 +171,10 @@ func NewSession(conn net.Conn) *Session {
 			err := s.sock.write(r.pdu)
 
 			if err != nil {
-				//TODO ...
-				if err := s.sock.close(); err != nil {
-					//TODO ...
-				}
+				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.pdu, err))
+				s.errEvt(err)
+			} else {
+				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.pdu))
 			}
 
 			now := time.Now()
@@ -171,11 +218,13 @@ func NewSession(conn net.Conn) *Session {
 						Err: ErrTimeout,
 					}
 					delete(reqsInFlight, _seq)
+					s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.pdu))
 				} else {
-					//TODO ...
+					s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
 				}
 			}); err != nil {
-				//TODO ...
+				s.logEvt(Error, fmt.Sprintf("[]can't scheduling req timeout job: [%v]", err))
+				s.errEvt(err)
 			}
 
 			if atomic.AddInt32(&outWin, 1) < atomic.LoadInt32(&s.winLimit) {
@@ -197,9 +246,11 @@ func NewSession(conn net.Conn) *Session {
 				case r := <-s.outReqCh:
 					handleReq(r)
 				case <-s.closed:
+					s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
 					return
 				}
 			case <-s.closed:
+				s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
 				return
 			}
 		}
@@ -212,15 +263,19 @@ func NewSession(conn net.Conn) *Session {
 		for {
 			pdu, err := s.sock.read()
 
-			if err != nil {
-				//TODO ...
-				break
-			}
-
 			select {
 			case <-s.closed:
+				s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
 				return
 			default:
+			}
+
+			if err != nil {
+				s.logEvt(Error, fmt.Sprintf("can't read pdu from socket: [%v]", err))
+				s.errEvt(err)
+				continue
+			} else {
+				s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
 			}
 
 			now := time.Now()
@@ -239,19 +294,21 @@ func NewSession(conn net.Conn) *Session {
 						resp, err := pdu.CreateResp(EsmeRThrottled)
 
 						if err != nil {
-							//TODO ...
+							s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+							s.errEvt(err)
+						} else {
+							s.SendResp(resp)
 						}
-
-						s.SendResp(resp)
 					} else {
 						if pdu.Id == EnquireLink {
 							resp, err := pdu.CreateResp(EsmeROk)
 
 							if err != nil {
-								//TODO ...
+								s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+								s.errEvt(err)
+							} else {
+								s.SendResp(resp)
 							}
-
-							s.SendResp(resp)
 						} else {
 							s.inPduCh <- pdu
 						}
@@ -260,10 +317,11 @@ func NewSession(conn net.Conn) *Session {
 					resp, err := pdu.CreateResp(EsmeRThrottled)
 
 					if err != nil {
-						//TODO ...
+						s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+						s.errEvt(err)
+					} else {
+						s.SendResp(resp)
 					}
-
-					s.SendResp(resp)
 				}
 			} else {
 				func() {
@@ -288,7 +346,7 @@ func NewSession(conn net.Conn) *Session {
 						}
 						delete(reqsInFlight, pdu.Seq)
 					} else {
-						//TODO ...
+						s.logEvt(Warning, fmt.Sprintf("received unexpected pdu: [%v]", pdu))
 					}
 				}()
 			}
@@ -314,7 +372,7 @@ func (s *Session) SendResp(pdu *Pdu) {
 	if !pdu.IsReq() {
 		s.outRespCh <- pdu
 	} else {
-		//TODO ...
+		s.logEvt(Error, fmt.Sprintf("trying send bad resp: [%v]", pdu))
 	}
 }
 
@@ -322,9 +380,29 @@ func (s *Session) InPduCh() <-chan *Pdu {
 	return s.inPduCh
 }
 
+func (s *Session) EvtCh() <-chan Evt {
+	return s.evtCh
+}
+
 func (s *Session) Close() error {
 	s.scheduler.Clear()
 	s.scheduler.Stop()
 	close(s.closed)
 	return s.sock.close()
+}
+
+func (s *Session) logEvt(severity Severity, msg string) {
+	if severity < s.logSeverity {
+		return
+	}
+
+	s.evtCh <- &LogEvt{severity: severity, msg: fmt.Sprintf("[%v]: %v", s.RemoteAddr(), msg)}
+}
+
+func (s *Session) errEvt(err error) {
+	s.evtCh <- &ErrEvt{err: err}
+}
+
+func (s *Session) RemoteAddr() net.Addr {
+	return s.sock.c.RemoteAddr()
 }
