@@ -71,39 +71,55 @@ func (e *ErrEvt) Err() error {
 	return e.err
 }
 
+type SessionConfig struct {
+	RpsLimit               int32
+	WinLimit               int32
+	ThrottlePauseSec       int32
+	ReqTimeoutSec          int32
+	EnquireLinkIntervalSec int64
+	LogSeverity            Severity
+}
+
+func NewDefaultSessionConfig() *SessionConfig {
+	return &SessionConfig{
+		RpsLimit:               1,
+		WinLimit:               1,
+		ThrottlePauseSec:       1,
+		ReqTimeoutSec:          2,
+		EnquireLinkIntervalSec: 15,
+		LogSeverity:            Info,
+	}
+}
+
 type Session struct {
-	sock                   *sock
-	scheduler              *gocron.Scheduler
-	inPduCh                chan *Pdu
-	evtCh                  chan Evt
-	outReqCh               chan *req
-	outRespCh              chan *Pdu
-	closed                 chan struct{}
-	rpsLimit               int32
-	winLimit               int32
-	throttlePauseSec       int32
-	reqTimeoutSec          int32
-	enquireLinkIntervalSec int64
-	logSeverity            Severity
+	sock      *sock
+	scheduler *gocron.Scheduler
+	inPduCh   chan *Pdu
+	evtCh     chan Evt
+	outReqCh  chan *req
+	outRespCh chan *Pdu
+	closed    chan struct{}
+	cfg       *SessionConfig
 }
 
 func NewSession(conn net.Conn) *Session {
-	s := &Session{
-		sock:                   newSock(conn),
-		scheduler:              gocron.NewScheduler(time.UTC),
-		inPduCh:                make(chan *Pdu, chanBuffSize),
-		evtCh:                  make(chan Evt, chanBuffSize),
-		outReqCh:               make(chan *req),
-		outRespCh:              make(chan *Pdu, chanBuffSize),
-		closed:                 make(chan struct{}),
-		rpsLimit:               1,
-		winLimit:               1,
-		throttlePauseSec:       1,
-		reqTimeoutSec:          2,
-		enquireLinkIntervalSec: 15,
-		logSeverity:            Info,
-	}
+	return NewSessionWithConfig(conn, NewDefaultSessionConfig())
+}
 
+func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig) *Session {
+	return &Session{
+		sock:      newSock(conn),
+		scheduler: gocron.NewScheduler(time.UTC),
+		inPduCh:   make(chan *Pdu, chanBuffSize),
+		evtCh:     make(chan Evt, chanBuffSize),
+		outReqCh:  make(chan *req),
+		outRespCh: make(chan *Pdu, chanBuffSize),
+		closed:    make(chan struct{}),
+		cfg:       cfg,
+	}
+}
+
+func (s *Session) Run() {
 	s.scheduler.StartAsync()
 
 	outWinSema := make(chan struct{}, 1)
@@ -115,9 +131,9 @@ func NewSession(conn net.Conn) *Session {
 	lastReading := time.Now().Unix()
 	mu := sync.Mutex{}
 
-	if _, err := s.scheduler.Every(uint64(s.enquireLinkIntervalSec)).Seconds().Do(func() {
+	if _, err := s.scheduler.Every(uint64(s.cfg.EnquireLinkIntervalSec)).Seconds().Do(func() {
 		silenceIntervalSec := time.Now().Unix() - atomic.LoadInt64(&lastReading)
-		enquireLinkIntervalSec := atomic.LoadInt64(&s.enquireLinkIntervalSec)
+		enquireLinkIntervalSec := atomic.LoadInt64(&s.cfg.EnquireLinkIntervalSec)
 		if silenceIntervalSec >= 2*enquireLinkIntervalSec {
 			s.logEvt(Warning, fmt.Sprintf("silence interval [%v] exceeded two enquireLinkInterval [%v]. Socket closing...",
 				silenceIntervalSec, enquireLinkIntervalSec))
@@ -187,27 +203,27 @@ func NewSession(conn net.Conn) *Session {
 			sentReqs++
 
 			var pause time.Duration
-			if sentReqs >= atomic.LoadInt32(&s.rpsLimit) {
+			if sentReqs >= atomic.LoadInt32(&s.cfg.RpsLimit) {
 				pause = time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))
 			}
 
 			mu.Lock()
 			reqsInFlight[seq] = r
-			if throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.throttlePauseSec)) - now.Sub(lastThrottle);
+			if throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(lastThrottle);
 				throttlePause > pause {
 				pause = throttlePause
 			}
 			mu.Unlock()
 
 			_seq := seq
-			if r.j, err = s.scheduler.Every(uint64(s.reqTimeoutSec)).Seconds().Do(func() {
+			if r.j, err = s.scheduler.Every(uint64(s.cfg.ReqTimeoutSec)).Seconds().Do(func() {
 				mu.Lock()
 				defer mu.Unlock()
 
 				if req, ok := reqsInFlight[_seq]; ok {
 					s.scheduler.RemoveByReference(req.j)
 
-					if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.winLimit) {
+					if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
 						select {
 						case <-outWinSema:
 						default:
@@ -227,7 +243,7 @@ func NewSession(conn net.Conn) *Session {
 				s.errEvt(err)
 			}
 
-			if atomic.AddInt32(&outWin, 1) < atomic.LoadInt32(&s.winLimit) {
+			if atomic.AddInt32(&outWin, 1) < atomic.LoadInt32(&s.cfg.WinLimit) {
 				select {
 				case <-outWinSema:
 				default:
@@ -282,7 +298,7 @@ func NewSession(conn net.Conn) *Session {
 			atomic.StoreInt64(&lastReading, now.Unix())
 
 			if pdu.IsReq() {
-				if atomic.AddInt32(&inWin, 1) <= atomic.LoadInt32(&s.winLimit) {
+				if atomic.AddInt32(&inWin, 1) <= atomic.LoadInt32(&s.cfg.WinLimit) {
 					if s := now.Unix(); s != sec {
 						sec = s
 						receivedReqs = 0
@@ -290,7 +306,7 @@ func NewSession(conn net.Conn) *Session {
 
 					receivedReqs++
 
-					if receivedReqs > atomic.LoadInt32(&s.rpsLimit) {
+					if receivedReqs > atomic.LoadInt32(&s.cfg.RpsLimit) {
 						resp, err := pdu.CreateResp(EsmeRThrottled)
 
 						if err != nil {
@@ -334,7 +350,7 @@ func NewSession(conn net.Conn) *Session {
 
 					if req, ok := reqsInFlight[pdu.Seq]; ok {
 						s.scheduler.RemoveByReference(req.j)
-						if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.winLimit) {
+						if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
 							select {
 							case <-outWinSema:
 							default:
@@ -352,8 +368,6 @@ func NewSession(conn net.Conn) *Session {
 			}
 		}
 	}()
-
-	return s
 }
 
 func (s *Session) SendReq(pdu *Pdu) <-chan *Resp {
@@ -392,7 +406,7 @@ func (s *Session) Close() error {
 }
 
 func (s *Session) logEvt(severity Severity, msg string) {
-	if severity < s.logSeverity {
+	if severity < s.cfg.LogSeverity {
 		return
 	}
 
@@ -405,4 +419,13 @@ func (s *Session) errEvt(err error) {
 
 func (s *Session) RemoteAddr() net.Addr {
 	return s.sock.c.RemoteAddr()
+}
+
+func (s *Session) SetConfig(cfg *SessionConfig) {
+	atomic.StoreInt32(&s.cfg.RpsLimit, cfg.RpsLimit)
+	atomic.StoreInt32(&s.cfg.WinLimit, cfg.WinLimit)
+	atomic.StoreInt32(&s.cfg.ThrottlePauseSec, cfg.ThrottlePauseSec)
+	atomic.StoreInt32(&s.cfg.ReqTimeoutSec, cfg.ReqTimeoutSec)
+	atomic.StoreInt64(&s.cfg.EnquireLinkIntervalSec, cfg.EnquireLinkIntervalSec)
+	s.cfg.LogSeverity = cfg.LogSeverity
 }
