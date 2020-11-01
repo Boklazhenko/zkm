@@ -157,6 +157,8 @@ func (s *Session) Run() {
 		for {
 			select {
 			case r := <-s.outRespCh:
+				atomic.AddInt32(&inWin, -1)
+
 				err := s.sock.write(r)
 
 				if err != nil {
@@ -165,8 +167,6 @@ func (s *Session) Run() {
 				} else {
 					s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r))
 				}
-
-				atomic.AddInt32(&inWin, -1)
 			case <-s.closed:
 				s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
 				return
