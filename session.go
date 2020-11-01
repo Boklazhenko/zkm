@@ -401,7 +401,12 @@ func (s *Session) EvtCh() <-chan Evt {
 func (s *Session) Close() error {
 	s.scheduler.Clear()
 	s.scheduler.Stop()
-	close(s.closed)
+	select {
+	case <-s.closed:
+	default:
+		close(s.closed)
+	}
+
 	return s.sock.close()
 }
 
