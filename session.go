@@ -1,6 +1,7 @@
 package zkm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/go-co-op/gocron"
@@ -13,20 +14,18 @@ import (
 const chanBuffSize = 10000
 
 var ErrTimeout = errors.New("timeout wait for response")
+var ErrClosed = errors.New("session closed")
 
-type req struct {
-	pdu    *Pdu
-	respCh chan *Resp
-	j      *gocron.Job
-}
-
-func newReq(pdu *Pdu) *req {
-	return &req{pdu: pdu, respCh: make(chan *Resp, 1)}
+type Req struct {
+	Pdu *Pdu
+	j   *gocron.Job
+	Ctx interface{}
 }
 
 type Resp struct {
 	Err error
 	Pdu *Pdu
+	Req *Req
 }
 
 type Evt interface {
@@ -71,12 +70,107 @@ func (e *ErrEvt) Err() error {
 	return e.err
 }
 
+type SpeedController interface {
+	Out() error
+	In() error
+	SetRpsLimit(rpsLimit int32)
+	Run(ctx context.Context)
+}
+
+var errThrottling = errors.New("throttling error")
+
+type DefaultSpeedController struct {
+	rpsLimit  int32
+	inSec     int64
+	inReqs    int32
+	outReqsCh chan struct{}
+	running   chan struct{}
+}
+
+func NewDefaultSpeedController() *DefaultSpeedController {
+	return &DefaultSpeedController{
+		rpsLimit:  1,
+		inSec:     0,
+		inReqs:    0,
+		outReqsCh: make(chan struct{}),
+		running:   make(chan struct{}, 1),
+	}
+}
+
+func (c *DefaultSpeedController) Out() error {
+	select {
+	case _, ok := <-c.outReqsCh:
+		if ok {
+			return nil
+		} else {
+			return fmt.Errorf("controller stopped")
+		}
+	}
+}
+
+func (c *DefaultSpeedController) In() error {
+	s := time.Now().Unix()
+	var inReqs int32 = 1
+	if atomic.SwapInt64(&c.inSec, s) != s {
+		atomic.StoreInt32(&c.inReqs, 1)
+	} else {
+		inReqs = atomic.AddInt32(&c.inReqs, 1)
+	}
+
+	if inReqs > atomic.LoadInt32(&c.rpsLimit) {
+		return errThrottling
+	} else {
+		return nil
+	}
+}
+
+func (c *DefaultSpeedController) SetRpsLimit(rpsLimit int32) {
+	atomic.StoreInt32(&c.rpsLimit, rpsLimit)
+}
+
+func (c *DefaultSpeedController) Run(ctx context.Context) {
+	select {
+	case c.running <- struct{}{}:
+	case <-ctx.Done():
+		return
+	}
+
+	sec := time.Now().Unix()
+	var reqs int32 = 0
+	for {
+		select {
+		case c.outReqsCh <- struct{}{}:
+			now := time.Now()
+			if s := now.Unix(); s != sec {
+				sec = s
+				reqs = 1
+			} else {
+				reqs++
+			}
+
+			if reqs >= atomic.LoadInt32(&c.rpsLimit) {
+				select {
+				case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
+				case <-ctx.Done():
+					close(c.outReqsCh)
+					return
+				}
+			}
+		case <-ctx.Done():
+			close(c.outReqsCh)
+			return
+		}
+	}
+}
+
 type SessionConfig struct {
 	RpsLimit               int32
 	WinLimit               int32
 	ThrottlePauseSec       int32
 	ReqTimeoutSec          int32
+	EnquireLinkEnabled     bool
 	EnquireLinkIntervalSec int64
+	SilenceTimeoutSec      int64
 	LogSeverity            Severity
 }
 
@@ -86,328 +180,392 @@ func NewDefaultSessionConfig() *SessionConfig {
 		WinLimit:               1,
 		ThrottlePauseSec:       1,
 		ReqTimeoutSec:          2,
+		EnquireLinkEnabled:     false,
 		EnquireLinkIntervalSec: 15,
+		SilenceTimeoutSec:      60,
 		LogSeverity:            Info,
 	}
 }
 
 type Session struct {
-	sock      *sock
-	scheduler *gocron.Scheduler
-	inPduCh   chan *Pdu
-	evtCh     chan Evt
-	outReqCh  chan *req
-	outRespCh chan *Pdu
-	closed    chan struct{}
-	cfg       *SessionConfig
+	sock            *sock
+	scheduler       *gocron.Scheduler
+	inReqCh         chan *Pdu
+	evtCh           chan Evt
+	outReqCh        chan *Req
+	outRespCh       chan *Pdu
+	inRespCh        chan *Resp
+	cfg             *SessionConfig
+	speedController SpeedController
+	inWin           int32
+	outWin          int32
+	outWinSema      chan struct{}
+	lastReading     int64
+	reqsInFlight    map[uint32]*Req
+	lastThrottle    time.Time
+	mu              sync.Mutex
 }
 
-func NewSession(conn net.Conn) *Session {
-	return NewSessionWithConfig(conn, NewDefaultSessionConfig())
+func NewSession(conn net.Conn, speedController SpeedController) *Session {
+	return NewSessionWithConfig(conn, NewDefaultSessionConfig(), speedController)
 }
 
-func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig) *Session {
+func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig, speedController SpeedController) *Session {
 	return &Session{
-		sock:      newSock(conn),
-		scheduler: gocron.NewScheduler(time.UTC),
-		inPduCh:   make(chan *Pdu, chanBuffSize),
-		evtCh:     make(chan Evt, chanBuffSize),
-		outReqCh:  make(chan *req),
-		outRespCh: make(chan *Pdu, chanBuffSize),
-		closed:    make(chan struct{}),
-		cfg:       cfg,
+		sock:            newSock(conn),
+		scheduler:       gocron.NewScheduler(time.UTC),
+		inReqCh:         make(chan *Pdu, chanBuffSize),
+		evtCh:           make(chan Evt, chanBuffSize),
+		outReqCh:        make(chan *Req),
+		outRespCh:       make(chan *Pdu, chanBuffSize),
+		inRespCh:        make(chan *Resp, chanBuffSize),
+		cfg:             cfg,
+		speedController: speedController,
+		outWinSema:      make(chan struct{}, 1),
+		lastReading:     time.Now().Unix(),
+		reqsInFlight:    make(map[uint32]*Req),
 	}
 }
 
-func (s *Session) Run() {
-	s.scheduler.StartAsync()
+func (s *Session) Run(ctx context.Context) {
+	wg := sync.WaitGroup{}
 
-	outWinSema := make(chan struct{}, 1)
-	outEnquireLinkReqCh := make(chan *req, 1)
-	var outWin int32
-	var inWin int32
-	reqsInFlight := make(map[uint32]*req)
-	var lastThrottle time.Time
-	lastReading := time.Now().Unix()
-	mu := sync.Mutex{}
-
-	if _, err := s.scheduler.Every(uint64(s.cfg.EnquireLinkIntervalSec)).Seconds().Do(func() {
-		silenceIntervalSec := time.Now().Unix() - atomic.LoadInt64(&lastReading)
-		enquireLinkIntervalSec := atomic.LoadInt64(&s.cfg.EnquireLinkIntervalSec)
-		if silenceIntervalSec >= 2*enquireLinkIntervalSec {
-			s.logEvt(Warning, fmt.Sprintf("silence interval [%v] exceeded two enquireLinkInterval [%v]. Socket closing...",
-				silenceIntervalSec, enquireLinkIntervalSec))
-			if err := s.sock.close(); err != nil {
-				s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
-				s.errEvt(err)
-			}
-		} else if silenceIntervalSec >= enquireLinkIntervalSec {
-			select {
-			case outEnquireLinkReqCh <- newReq(NewPdu(EnquireLink)):
-			default:
-			}
-		}
-	}); err != nil {
-		s.logEvt(Error, fmt.Sprintf("[]can't scheduling periodically enquireLink job: [%v]", err))
-		s.errEvt(err)
-	}
-
-	//handling outgoing responses
+	wg.Add(1)
 	go func() {
-		for {
-			select {
-			case r := <-s.outRespCh:
-				atomic.AddInt32(&inWin, -1)
+		defer wg.Done()
 
-				err := s.sock.write(r)
+		stopped := s.scheduler.StartAsync()
 
-				if err != nil {
-					s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r, err))
+		if _, err := s.scheduler.Every(1).Seconds().Do(func() {
+			now := time.Now()
+			lastReading := atomic.LoadInt64(&s.lastReading)
+
+			if now.Unix()-lastReading >= atomic.LoadInt64(&s.cfg.SilenceTimeoutSec) {
+				s.logEvt(Warning, fmt.Sprintf("silence timeout [%v] exceeded. Socket closing...",
+					atomic.LoadInt64(&s.cfg.SilenceTimeoutSec)))
+				if err := s.sock.close(); err != nil {
+					s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
 					s.errEvt(err)
-				} else {
-					s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r))
 				}
-			case <-s.closed:
-				s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
 				return
 			}
-		}
-	}()
 
-	//handling outgoing requests
-	go func() {
-		sec := time.Now().Unix()
-		var sentReqs int32
-		var seq uint32
-
-		handleReq := func(r *req) {
-			seq++
-			r.pdu.Seq = seq
-
-			err := s.sock.write(r.pdu)
-
-			if err != nil {
-				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.pdu, err))
-				s.errEvt(err)
-			} else {
-				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.pdu))
-			}
-
-			now := time.Now()
-
-			if s := now.Unix(); s != sec {
-				sec = s
-				sentReqs = 0
-			}
-
-			sentReqs++
-
-			var pause time.Duration
-			if sentReqs >= atomic.LoadInt32(&s.cfg.RpsLimit) {
-				pause = time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))
-			}
-
-			mu.Lock()
-			reqsInFlight[seq] = r
-			if throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(lastThrottle);
-				throttlePause > pause {
-				pause = throttlePause
-			}
-			mu.Unlock()
-
-			_seq := seq
-			if r.j, err = s.scheduler.Every(uint64(s.cfg.ReqTimeoutSec)).Seconds().Do(func() {
-				mu.Lock()
-				defer mu.Unlock()
-
-				if req, ok := reqsInFlight[_seq]; ok {
-					s.scheduler.RemoveByReference(req.j)
-
-					if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
-						select {
-						case <-outWinSema:
-						default:
-						}
-					}
-
-					req.respCh <- &Resp{
-						Err: ErrTimeout,
-					}
-					delete(reqsInFlight, _seq)
-					s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.pdu))
-				} else {
-					s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
-				}
-			}); err != nil {
-				s.logEvt(Error, fmt.Sprintf("[]can't scheduling req timeout job: [%v]", err))
-				s.errEvt(err)
-			}
-
-			if atomic.AddInt32(&outWin, 1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+			if now.Unix()-lastReading >= atomic.LoadInt64(&s.cfg.EnquireLinkIntervalSec) {
 				select {
-				case <-outWinSema:
+				case s.outReqCh <- &Req{
+					Pdu: NewPdu(EnquireLink),
+				}:
 				default:
 				}
 			}
-
-			time.Sleep(pause)
+		}); err != nil {
+			s.logEvt(Error, fmt.Sprintf("can't scheduling periodically job: [%v]", err))
+			s.errEvt(err)
 		}
 
-		for {
-			select {
-			case outWinSema <- struct{}{}:
-				select {
-				case r := <-outEnquireLinkReqCh:
-					handleReq(r)
-				case r := <-s.outReqCh:
-					handleReq(r)
-				case <-s.closed:
-					s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
-					return
-				}
-			case <-s.closed:
-				s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
-				return
-			}
+		select {
+		case <-ctx.Done():
+			s.scheduler.Clear()
+			s.scheduler.Stop()
+			<-stopped
+			s.logEvt(Debug, "goroutine handling scheduler completed")
 		}
 	}()
 
-	//handling incoming requests and responses
+	wg.Add(1)
 	go func() {
-		sec := time.Now().Unix()
-		var receivedReqs int32
-		for {
-			pdu, err := s.sock.read()
+		defer wg.Done()
+		s.speedController.Run(ctx)
+	}()
 
-			select {
-			case <-s.closed:
-				s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
-				return
-			default:
-			}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.handleIncomingPdus(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.handleOutgoingReqs(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.handleOutgoingResponses(ctx)
+	}()
+
+	select {
+	case <-ctx.Done():
+		if err := s.sock.close(); err != nil {
+			s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
+			s.errEvt(err)
+		}
+	}
+
+	wg.Wait()
+
+	for _, r := range s.reqsInFlight {
+		_r := r
+		s.inRespCh <- &Resp{
+			Err: ErrClosed,
+			Req: _r,
+		}
+	}
+
+	s.logEvt(Debug, "session completed")
+
+	close(s.evtCh)
+	close(s.inRespCh)
+	close(s.inReqCh)
+}
+
+func (s *Session) InRespCh() <-chan *Resp {
+	return s.inRespCh
+}
+
+func (s *Session) InReqCh() <-chan *Pdu {
+	return s.inReqCh
+}
+
+func (s *Session) InEvtCh() <-chan Evt {
+	return s.evtCh
+}
+
+func (s *Session) OutReqCh() chan<- *Req {
+	return s.outReqCh
+}
+
+func (s *Session) OutRespCh() chan<- *Pdu {
+	return s.outRespCh
+}
+
+func (s *Session) handleOutgoingResponses(ctx context.Context) {
+	for {
+		select {
+		case r := <-s.outRespCh:
+			atomic.AddInt32(&s.inWin, -1)
+
+			err := s.sock.write(r)
 
 			if err != nil {
-				s.logEvt(Error, fmt.Sprintf("can't read pdu from socket: [%v]", err))
+				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r, err))
 				s.errEvt(err)
-				continue
 			} else {
-				s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
+				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r))
 			}
+		case <-ctx.Done():
+			for range s.outRespCh {
+			}
+			s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
+			return
+		}
+	}
+}
 
-			now := time.Now()
-			atomic.StoreInt64(&lastReading, now.Unix())
+func (s *Session) handleIncomingPdus(ctx context.Context) {
+	for {
+		pdu, err := s.sock.read()
 
-			if pdu.IsReq() {
-				if atomic.AddInt32(&inWin, 1) <= atomic.LoadInt32(&s.cfg.WinLimit) {
-					if s := now.Unix(); s != sec {
-						sec = s
-						receivedReqs = 0
-					}
+		select {
+		case <-ctx.Done():
+			s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
+			return
+		default:
+		}
 
-					receivedReqs++
+		if err != nil {
+			s.logEvt(Error, fmt.Sprintf("can't read pdu from socket: [%v]", err))
+			s.errEvt(err)
+			continue
+		} else {
+			s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
+		}
 
-					if receivedReqs > atomic.LoadInt32(&s.cfg.RpsLimit) {
-						resp, err := pdu.CreateResp(EsmeRThrottled)
+		now := time.Now()
+		atomic.StoreInt64(&s.lastReading, now.Unix())
 
-						if err != nil {
-							s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
-							s.errEvt(err)
-						} else {
-							s.SendResp(resp)
-						}
-					} else {
-						if pdu.Id == EnquireLink {
-							resp, err := pdu.CreateResp(EsmeROk)
-
-							if err != nil {
-								s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
-								s.errEvt(err)
-							} else {
-								s.SendResp(resp)
-							}
-						} else {
-							s.inPduCh <- pdu
-						}
-					}
-				} else {
+		if pdu.IsReq() {
+			if atomic.AddInt32(&s.inWin, 1) <= atomic.LoadInt32(&s.cfg.WinLimit) {
+				if err := s.speedController.In(); err == errThrottling {
 					resp, err := pdu.CreateResp(EsmeRThrottled)
 
 					if err != nil {
 						s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
 						s.errEvt(err)
 					} else {
-						s.SendResp(resp)
+						s.outRespCh <- resp
+					}
+				} else if err != nil {
+					s.logEvt(Error, fmt.Sprintf("speed_controller.In returned error: [%v]", err))
+					s.errEvt(err)
+
+					resp, err := pdu.CreateResp(EsmeRSysErr)
+
+					if err != nil {
+						s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+						s.errEvt(err)
+					} else {
+						s.outRespCh <- resp
+					}
+				} else {
+					if pdu.Id == EnquireLink {
+						resp, err := pdu.CreateResp(EsmeROk)
+
+						if err != nil {
+							s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+							s.errEvt(err)
+						} else {
+							s.outRespCh <- resp
+						}
+					} else {
+						s.inReqCh <- pdu
 					}
 				}
 			} else {
-				func() {
-					mu.Lock()
-					defer mu.Unlock()
+				resp, err := pdu.CreateResp(EsmeRThrottled)
 
-					if pdu.Status == EsmeRThrottled {
-						lastThrottle = now
+				if err != nil {
+					s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+					s.errEvt(err)
+				} else {
+					s.outRespCh <- resp
+				}
+			}
+		} else {
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+
+				if pdu.Status == EsmeRThrottled {
+					s.lastThrottle = now
+				}
+
+				if req, ok := s.reqsInFlight[pdu.Seq]; ok {
+					s.scheduler.RemoveByReference(req.j)
+					if atomic.AddInt32(&s.outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+						select {
+						case <-s.outWinSema:
+						default:
+						}
 					}
 
-					if req, ok := reqsInFlight[pdu.Seq]; ok {
-						s.scheduler.RemoveByReference(req.j)
-						if atomic.AddInt32(&outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+					s.inRespCh <- &Resp{
+						Pdu: pdu,
+						Req: req,
+					}
+
+					delete(s.reqsInFlight, pdu.Seq)
+				} else {
+					s.logEvt(Warning, fmt.Sprintf("received unexpected pdu: [%v]", pdu))
+				}
+			}()
+		}
+	}
+}
+
+func (s *Session) handleOutgoingReqs(ctx context.Context) {
+	defer func() {
+		for r := range s.outReqCh {
+			_r := r
+			s.inRespCh <- &Resp{
+				Err: ErrClosed,
+				Req: _r,
+			}
+		}
+		s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
+	}()
+
+	var seq uint32
+
+	for {
+		select {
+		case s.outWinSema <- struct{}{}:
+			select {
+			case r := <-s.outReqCh:
+				if err := s.speedController.Out(); err != nil {
+					s.logEvt(Error, fmt.Sprintf("speed_controller.Out returned err: [%v]", err))
+					s.errEvt(err)
+					s.inRespCh <- &Resp{
+						Err: err,
+						Req: r,
+					}
+				} else {
+					seq++
+					r.Pdu.Seq = seq
+
+					err := s.sock.write(r.Pdu)
+
+					if err != nil {
+						s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.Pdu, err))
+						s.errEvt(err)
+						s.inRespCh <- &Resp{
+							Err: err,
+							Req: r,
+						}
+					} else {
+						s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.Pdu))
+
+						now := time.Now()
+
+						s.mu.Lock()
+						s.reqsInFlight[seq] = r
+						throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
+						s.mu.Unlock()
+
+						_seq := seq
+						if r.j, err = s.scheduler.Every(uint64(atomic.LoadInt32(&s.cfg.ReqTimeoutSec))).Seconds().Do(func() {
+							s.mu.Lock()
+							defer s.mu.Unlock()
+
+							if req, ok := s.reqsInFlight[_seq]; ok {
+								s.scheduler.RemoveByReference(req.j)
+
+								if atomic.AddInt32(&s.outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+									select {
+									case <-s.outWinSema:
+									default:
+									}
+								}
+
+								s.inRespCh <- &Resp{
+									Err: ErrTimeout,
+									Req: req,
+								}
+								delete(s.reqsInFlight, _seq)
+								s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.Pdu))
+							} else {
+								s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
+							}
+						}); err != nil {
+							s.logEvt(Error, fmt.Sprintf("[]can't scheduling req timeout job: [%v]", err))
+							s.errEvt(err)
+						}
+
+						if atomic.AddInt32(&s.outWin, 1) < atomic.LoadInt32(&s.cfg.WinLimit) {
 							select {
-							case <-outWinSema:
+							case <-s.outWinSema:
 							default:
 							}
 						}
 
-						req.respCh <- &Resp{
-							Pdu: pdu,
+						if throttlePause > 0 {
+							select {
+							case <-time.After(throttlePause):
+							case <-ctx.Done():
+								return
+							}
 						}
-						delete(reqsInFlight, pdu.Seq)
-					} else {
-						s.logEvt(Warning, fmt.Sprintf("received unexpected pdu: [%v]", pdu))
 					}
-				}()
+				}
+			case <-ctx.Done():
+				return
 			}
-		}
-	}()
-}
-
-func (s *Session) SendReq(pdu *Pdu) <-chan *Resp {
-	req := newReq(pdu)
-	if req.pdu.IsReq() {
-		s.outReqCh <- req
-	} else {
-		req.respCh <- &Resp{
-			Err: fmt.Errorf("cmd id [%v] is not request", req.pdu.Id),
+		case <-ctx.Done():
+			return
 		}
 	}
-	return req.respCh
-}
-
-func (s *Session) SendResp(pdu *Pdu) {
-	if !pdu.IsReq() {
-		s.outRespCh <- pdu
-	} else {
-		s.logEvt(Error, fmt.Sprintf("trying send bad resp: [%v]", pdu))
-	}
-}
-
-func (s *Session) InPduCh() <-chan *Pdu {
-	return s.inPduCh
-}
-
-func (s *Session) EvtCh() <-chan Evt {
-	return s.evtCh
-}
-
-func (s *Session) Close() error {
-	s.scheduler.Clear()
-	s.scheduler.Stop()
-	select {
-	case <-s.closed:
-	default:
-		close(s.closed)
-	}
-
-	return s.sock.close()
 }
 
 func (s *Session) logEvt(severity Severity, msg string) {
@@ -431,6 +589,9 @@ func (s *Session) SetConfig(cfg *SessionConfig) {
 	atomic.StoreInt32(&s.cfg.WinLimit, cfg.WinLimit)
 	atomic.StoreInt32(&s.cfg.ThrottlePauseSec, cfg.ThrottlePauseSec)
 	atomic.StoreInt32(&s.cfg.ReqTimeoutSec, cfg.ReqTimeoutSec)
+	s.cfg.EnquireLinkEnabled = cfg.EnquireLinkEnabled
 	atomic.StoreInt64(&s.cfg.EnquireLinkIntervalSec, cfg.EnquireLinkIntervalSec)
 	s.cfg.LogSeverity = cfg.LogSeverity
+
+	s.speedController.SetRpsLimit(cfg.RpsLimit)
 }
