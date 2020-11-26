@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-co-op/gocron"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -365,12 +366,13 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 }
 
 func (s *Session) handleIncomingPdus(ctx context.Context) {
+	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
+
 	for {
 		pdu, err := s.sock.read()
 
 		select {
 		case <-ctx.Done():
-			s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
 			return
 		default:
 		}
@@ -378,7 +380,12 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 		if err != nil {
 			s.logEvt(Error, fmt.Sprintf("can't read pdu from socket: [%v]", err))
 			s.errEvt(err)
-			continue
+
+			if errors.Is(err, io.EOF) {
+				break
+			} else {
+				continue
+			}
 		} else {
 			s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
 		}
