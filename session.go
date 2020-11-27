@@ -213,6 +213,7 @@ func NewSession(conn net.Conn, speedController SpeedController) *Session {
 }
 
 func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig, speedController SpeedController) *Session {
+	speedController.SetRpsLimit(cfg.RpsLimit)
 	return &Session{
 		sock:            newSock(conn),
 		scheduler:       scheduler.New(),
