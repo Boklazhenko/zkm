@@ -74,27 +74,29 @@ func (e *ErrEvt) Err() error {
 type SpeedController interface {
 	Out() error
 	In() error
-	SetRpsLimit(rpsLimit int32)
+	SetRpsLimit(in, out int32)
 	Run(ctx context.Context)
 }
 
 var errThrottling = errors.New("throttling error")
 
 type DefaultSpeedController struct {
-	rpsLimit  int32
-	inSec     int64
-	inReqs    int32
-	outReqsCh chan struct{}
-	running   chan struct{}
+	inRpsLimit  int32
+	outRpsLimit int32
+	inSec       int64
+	inReqs      int32
+	outReqsCh   chan struct{}
+	running     chan struct{}
 }
 
 func NewDefaultSpeedController() *DefaultSpeedController {
 	return &DefaultSpeedController{
-		rpsLimit:  1,
-		inSec:     0,
-		inReqs:    0,
-		outReqsCh: make(chan struct{}),
-		running:   make(chan struct{}, 1),
+		inRpsLimit:  1,
+		outRpsLimit: 1,
+		inSec:       0,
+		inReqs:      0,
+		outReqsCh:   make(chan struct{}),
+		running:     make(chan struct{}, 1),
 	}
 }
 
@@ -118,15 +120,16 @@ func (c *DefaultSpeedController) In() error {
 		inReqs = atomic.AddInt32(&c.inReqs, 1)
 	}
 
-	if inReqs > atomic.LoadInt32(&c.rpsLimit) {
+	if inReqs > atomic.LoadInt32(&c.inRpsLimit) {
 		return errThrottling
 	} else {
 		return nil
 	}
 }
 
-func (c *DefaultSpeedController) SetRpsLimit(rpsLimit int32) {
-	atomic.StoreInt32(&c.rpsLimit, rpsLimit)
+func (c *DefaultSpeedController) SetRpsLimit(in, out int32) {
+	atomic.StoreInt32(&c.inRpsLimit, in)
+	atomic.StoreInt32(&c.outRpsLimit, out)
 }
 
 func (c *DefaultSpeedController) Run(ctx context.Context) {
@@ -149,7 +152,7 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 				reqs++
 			}
 
-			if reqs >= atomic.LoadInt32(&c.rpsLimit) {
+			if reqs >= atomic.LoadInt32(&c.outRpsLimit) {
 				select {
 				case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
 				case <-ctx.Done():
@@ -165,7 +168,8 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 }
 
 type SessionConfig struct {
-	RpsLimit               int32
+	InRpsLimit             int32
+	OutRpsLimit            int32
 	WinLimit               int32
 	ThrottlePauseSec       int32
 	ReqTimeoutSec          int32
@@ -177,7 +181,8 @@ type SessionConfig struct {
 
 func NewDefaultSessionConfig() *SessionConfig {
 	return &SessionConfig{
-		RpsLimit:               1,
+		InRpsLimit:             1,
+		OutRpsLimit:            1,
 		WinLimit:               1,
 		ThrottlePauseSec:       1,
 		ReqTimeoutSec:          2,
@@ -213,7 +218,7 @@ func NewSession(conn net.Conn, speedController SpeedController) *Session {
 }
 
 func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig, speedController SpeedController) *Session {
-	speedController.SetRpsLimit(cfg.RpsLimit)
+	speedController.SetRpsLimit(cfg.InRpsLimit, cfg.OutRpsLimit)
 	return &Session{
 		sock:            newSock(conn),
 		scheduler:       scheduler.New(),
@@ -584,7 +589,8 @@ func (s *Session) RemoteAddr() net.Addr {
 }
 
 func (s *Session) SetConfig(cfg *SessionConfig) {
-	atomic.StoreInt32(&s.cfg.RpsLimit, cfg.RpsLimit)
+	atomic.StoreInt32(&s.cfg.InRpsLimit, cfg.InRpsLimit)
+	atomic.StoreInt32(&s.cfg.OutRpsLimit, cfg.OutRpsLimit)
 	atomic.StoreInt32(&s.cfg.WinLimit, cfg.WinLimit)
 	atomic.StoreInt32(&s.cfg.ThrottlePauseSec, cfg.ThrottlePauseSec)
 	atomic.StoreInt32(&s.cfg.ReqTimeoutSec, cfg.ReqTimeoutSec)
@@ -593,12 +599,13 @@ func (s *Session) SetConfig(cfg *SessionConfig) {
 	atomic.StoreInt64(&s.cfg.SilenceTimeoutSec, cfg.SilenceTimeoutSec)
 	s.cfg.LogSeverity = cfg.LogSeverity
 
-	s.speedController.SetRpsLimit(cfg.RpsLimit)
+	s.speedController.SetRpsLimit(cfg.InRpsLimit, cfg.OutRpsLimit)
 }
 
 func (s *Session) GetConfig() *SessionConfig {
 	return &SessionConfig{
-		RpsLimit:               atomic.LoadInt32(&s.cfg.RpsLimit),
+		InRpsLimit:             atomic.LoadInt32(&s.cfg.InRpsLimit),
+		OutRpsLimit:            atomic.LoadInt32(&s.cfg.OutRpsLimit),
 		WinLimit:               atomic.LoadInt32(&s.cfg.WinLimit),
 		ThrottlePauseSec:       atomic.LoadInt32(&s.cfg.ThrottlePauseSec),
 		ReqTimeoutSec:          atomic.LoadInt32(&s.cfg.ReqTimeoutSec),
