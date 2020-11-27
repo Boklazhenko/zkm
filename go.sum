@@ -2,6 +2,8 @@ github.com/Boklazhenko/scheduler v0.0.2 h1:pG/a/wYo65cR3PadOCQ/t8Zu6ndtWshvQDg9u
 github.com/Boklazhenko/scheduler v0.0.2/go.mod h1:wA0QCIa/iXGqqEBX6dLfkrc/UFOxRLDh8jb3v5SKy4w=
 github.com/Boklazhenko/scheduler v0.0.3 h1:uaTdIIxX0E6OrUquyT7lCNWCb6xD3YA4SJo3juVhPUA=
 github.com/Boklazhenko/scheduler v0.0.3/go.mod h1:wA0QCIa/iXGqqEBX6dLfkrc/UFOxRLDh8jb3v5SKy4w=
+github.com/Boklazhenko/scheduler v1.0.1 h1:IVJUEhmyeMCuNUivefKaC7GL80sMGc7lj37SEqEXpJs=
+github.com/Boklazhenko/scheduler v1.0.1/go.mod h1:wA0QCIa/iXGqqEBX6dLfkrc/UFOxRLDh8jb3v5SKy4w=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/emirpasic/gods v1.12.0 h1:QAUIPSaCu4G+POclxeqb3F+WPpdKqFGlw36+yOzGlrg=

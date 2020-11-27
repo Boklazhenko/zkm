@@ -76,7 +76,7 @@ type InWinChangedEvt struct {
 }
 
 func (e *InWinChangedEvt) String() string {
-	return fmt.Sprintf("in window changet to [%v]", e.value)
+	return fmt.Sprintf("in window changed to [%v]", e.value)
 }
 
 func (e *InWinChangedEvt) Value() int32 {
@@ -88,7 +88,7 @@ type OutWinChangedEvt struct {
 }
 
 func (e *OutWinChangedEvt) String() string {
-	return fmt.Sprintf("out window changet to [%v]", e.value)
+	return fmt.Sprintf("out window changed to [%v]", e.value)
 }
 
 func (e *OutWinChangedEvt) Value() int32 {
