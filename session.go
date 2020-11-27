@@ -589,7 +589,21 @@ func (s *Session) SetConfig(cfg *SessionConfig) {
 	atomic.StoreInt32(&s.cfg.ReqTimeoutSec, cfg.ReqTimeoutSec)
 	s.cfg.EnquireLinkEnabled = cfg.EnquireLinkEnabled
 	atomic.StoreInt64(&s.cfg.EnquireLinkIntervalSec, cfg.EnquireLinkIntervalSec)
+	atomic.StoreInt64(&s.cfg.SilenceTimeoutSec, cfg.SilenceTimeoutSec)
 	s.cfg.LogSeverity = cfg.LogSeverity
 
 	s.speedController.SetRpsLimit(cfg.RpsLimit)
+}
+
+func (s *Session) GetConfig() *SessionConfig {
+	return &SessionConfig{
+		RpsLimit:               atomic.LoadInt32(&s.cfg.RpsLimit),
+		WinLimit:               atomic.LoadInt32(&s.cfg.WinLimit),
+		ThrottlePauseSec:       atomic.LoadInt32(&s.cfg.ThrottlePauseSec),
+		ReqTimeoutSec:          atomic.LoadInt32(&s.cfg.ReqTimeoutSec),
+		EnquireLinkEnabled:     s.cfg.EnquireLinkEnabled,
+		EnquireLinkIntervalSec: atomic.LoadInt64(&s.cfg.EnquireLinkIntervalSec),
+		SilenceTimeoutSec:      atomic.LoadInt64(&s.cfg.SilenceTimeoutSec),
+		LogSeverity:            s.cfg.LogSeverity,
+	}
 }
