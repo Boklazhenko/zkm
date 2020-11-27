@@ -71,6 +71,64 @@ func (e *ErrEvt) Err() error {
 	return e.err
 }
 
+type InWinChangedEvt struct {
+	value int32
+}
+
+func (e *InWinChangedEvt) String() string {
+	return fmt.Sprintf("in window changet to [%v]", e.value)
+}
+
+func (e *InWinChangedEvt) Value() int32 {
+	return e.value
+}
+
+type OutWinChangedEvt struct {
+	value int32
+}
+
+func (e *OutWinChangedEvt) String() string {
+	return fmt.Sprintf("out window changet to [%v]", e.value)
+}
+
+func (e *OutWinChangedEvt) Value() int32 {
+	return e.value
+}
+
+type PduReceivedEvt struct {
+	id     Id
+	status Status
+}
+
+func (e *PduReceivedEvt) String() string {
+	return fmt.Sprintf("received pdu:[%v][%v]", e.id, e.status)
+}
+
+func (e *PduReceivedEvt) Id() Id {
+	return e.id
+}
+
+func (e *PduReceivedEvt) Status() Status {
+	return e.status
+}
+
+type PduSentEvt struct {
+	id     Id
+	status Status
+}
+
+func (e *PduSentEvt) String() string {
+	return fmt.Sprintf("sent pdu:[%v][%v]", e.id, e.status)
+}
+
+func (e *PduSentEvt) Id() Id {
+	return e.id
+}
+
+func (e *PduSentEvt) Status() Status {
+	return e.status
+}
+
 type SpeedController interface {
 	Out() error
 	In() error
@@ -344,17 +402,18 @@ func (s *Session) OutRespCh() chan<- *Pdu {
 func (s *Session) handleOutgoingResponses(ctx context.Context) {
 	for {
 		select {
-		case r := <-s.outRespCh:
-			atomic.AddInt32(&s.inWin, -1)
+		case pdu := <-s.outRespCh:
+			s.inWinChangedEvt(atomic.AddInt32(&s.inWin, -1))
 
-			err := s.sock.write(r)
+			err := s.sock.write(pdu)
 
 			if err != nil {
-				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r, err))
+				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", pdu, err))
 				s.errEvt(err)
 			} else {
 				atomic.StoreInt64(&s.lastWriting, time.Now().Unix())
-				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r))
+				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", pdu))
+				s.pduSentEvt(pdu)
 			}
 		case <-ctx.Done():
 			for range s.outRespCh {
@@ -388,13 +447,16 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 			}
 		} else {
 			s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
+			s.pduReceivedEvt(pdu)
 		}
 
 		now := time.Now()
 		atomic.StoreInt64(&s.lastReading, now.Unix())
 
 		if pdu.IsReq() {
-			if atomic.AddInt32(&s.inWin, 1) <= atomic.LoadInt32(&s.cfg.WinLimit) {
+			inWin := atomic.AddInt32(&s.inWin, 1)
+			s.inWinChangedEvt(inWin)
+			if inWin <= atomic.LoadInt32(&s.cfg.WinLimit) {
 				if err := s.speedController.In(); err == errThrottling {
 					resp, err := pdu.CreateResp(EsmeRThrottled)
 
@@ -451,7 +513,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 
 				if req, ok := s.reqsInFlight[pdu.Seq]; ok {
 					req.j.Cancel()
-					if atomic.AddInt32(&s.outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+					outWin := atomic.AddInt32(&s.outWin, -1)
+					s.outWinChangedEvt(outWin)
+					if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
 						select {
 						case <-s.outWinSema:
 						default:
@@ -513,6 +577,7 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 						}
 					} else {
 						s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.Pdu))
+						s.pduSentEvt(r.Pdu)
 
 						now := time.Now()
 
@@ -529,7 +594,9 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 							defer s.mu.Unlock()
 
 							if req, ok := s.reqsInFlight[_seq]; ok {
-								if atomic.AddInt32(&s.outWin, -1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+								outWin := atomic.AddInt32(&s.outWin, -1)
+								s.outWinChangedEvt(outWin)
+								if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
 									select {
 									case <-s.outWinSema:
 									default:
@@ -547,7 +614,9 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 							}
 						})
 
-						if atomic.AddInt32(&s.outWin, 1) < atomic.LoadInt32(&s.cfg.WinLimit) {
+						outWin := atomic.AddInt32(&s.outWin, 1)
+						s.outWinChangedEvt(outWin)
+						if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
 							select {
 							case <-s.outWinSema:
 							default:
@@ -582,6 +651,22 @@ func (s *Session) logEvt(severity Severity, msg string) {
 
 func (s *Session) errEvt(err error) {
 	s.evtCh <- &ErrEvt{err: err}
+}
+
+func (s *Session) inWinChangedEvt(value int32) {
+	s.evtCh <- &InWinChangedEvt{value: value}
+}
+
+func (s *Session) outWinChangedEvt(value int32) {
+	s.evtCh <- &OutWinChangedEvt{value: value}
+}
+
+func (s *Session) pduReceivedEvt(pdu *Pdu) {
+	s.evtCh <- &PduReceivedEvt{id: pdu.Id, status: pdu.Status}
+}
+
+func (s *Session) pduSentEvt(pdu *Pdu) {
+	s.evtCh <- &PduSentEvt{id: pdu.Id, status: pdu.Status}
 }
 
 func (s *Session) RemoteAddr() net.Addr {
