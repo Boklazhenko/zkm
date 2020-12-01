@@ -144,7 +144,8 @@ type DefaultSpeedController struct {
 	inSec       int64
 	inReqs      int32
 	outReqsCh   chan struct{}
-	running     chan struct{}
+	stop        chan struct{}
+	runCount    int32
 }
 
 func NewDefaultSpeedController() *DefaultSpeedController {
@@ -154,7 +155,7 @@ func NewDefaultSpeedController() *DefaultSpeedController {
 		inSec:       0,
 		inReqs:      0,
 		outReqsCh:   make(chan struct{}),
-		running:     make(chan struct{}, 1),
+		runCount:    0,
 	}
 }
 
@@ -191,36 +192,44 @@ func (c *DefaultSpeedController) SetRpsLimit(in, out int32) {
 }
 
 func (c *DefaultSpeedController) Run(ctx context.Context) {
-	select {
-	case c.running <- struct{}{}:
-	case <-ctx.Done():
-		return
-	}
+	if atomic.AddInt32(&c.runCount, 1) == 1 {
+		c.outReqsCh = make(chan struct{})
+		c.stop = make(chan struct{})
 
-	sec := time.Now().Unix()
-	var reqs int32 = 0
-	for {
-		select {
-		case c.outReqsCh <- struct{}{}:
-			now := time.Now()
-			if s := now.Unix(); s != sec {
-				sec = s
-				reqs = 1
-			} else {
-				reqs++
-			}
-
-			if reqs >= atomic.LoadInt32(&c.outRpsLimit) {
+		go func() {
+			sec := time.Now().Unix()
+			var reqs int32 = 0
+			for {
 				select {
-				case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
-				case <-ctx.Done():
+				case c.outReqsCh <- struct{}{}:
+					now := time.Now()
+					if s := now.Unix(); s != sec {
+						sec = s
+						reqs = 1
+					} else {
+						reqs++
+					}
+
+					if reqs >= atomic.LoadInt32(&c.outRpsLimit) {
+						select {
+						case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
+						case <-c.stop:
+							close(c.outReqsCh)
+							return
+						}
+					}
+				case <-c.stop:
 					close(c.outReqsCh)
 					return
 				}
 			}
-		case <-ctx.Done():
-			close(c.outReqsCh)
-			return
+		}()
+	}
+
+	select {
+	case <-ctx.Done():
+		if atomic.AddInt32(&c.runCount, -1) == 0 {
+			close(c.stop)
 		}
 	}
 }
