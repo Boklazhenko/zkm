@@ -130,7 +130,7 @@ func (e *PduSentEvt) Status() Status {
 }
 
 type SpeedController interface {
-	Out() error
+	Out(ctx context.Context) error
 	In() error
 	SetRpsLimit(in, out int32)
 	Run(ctx context.Context)
@@ -159,7 +159,7 @@ func NewDefaultSpeedController() *DefaultSpeedController {
 	}
 }
 
-func (c *DefaultSpeedController) Out() error {
+func (c *DefaultSpeedController) Out(ctx context.Context) error {
 	select {
 	case _, ok := <-c.outReqsCh:
 		if ok {
@@ -167,6 +167,8 @@ func (c *DefaultSpeedController) Out() error {
 		} else {
 			return fmt.Errorf("controller stopped")
 		}
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -564,7 +566,10 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 		case s.outWinSema <- struct{}{}:
 			select {
 			case r := <-s.outReqCh:
-				if err := s.speedController.Out(); err != nil {
+				if err := s.speedController.Out(ctx); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					}
 					s.logEvt(Error, fmt.Sprintf("speed_controller.Out returned err: [%v]", err))
 					s.errEvt(err)
 					s.inRespCh <- &Resp{
