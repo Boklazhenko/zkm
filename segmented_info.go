@@ -1,13 +1,13 @@
 package zkm
 
 type SegmentedInfo struct {
-	part       int
-	totalParts int
-	id         int
+	Part       int
+	TotalParts int
+	Id         int
 }
 
 func NewSegmentedInfo(pdu *Pdu) *SegmentedInfo {
-	segmentedInfo := &SegmentedInfo{part: 1, totalParts: 1, id: 0}
+	segmentedInfo := &SegmentedInfo{Part: 1, TotalParts: 1, Id: 0}
 
 	esmClass, err := pdu.GetMainAsUint32(ESMClass)
 
@@ -38,21 +38,21 @@ func NewSegmentedInfo(pdu *Pdu) *SegmentedInfo {
 			switch iei {
 			case 0x00: //concat 8bit
 				if iel == 3 {
-					segmentedInfo.id = int(sm[i])
+					segmentedInfo.Id = int(sm[i])
 					i++
-					segmentedInfo.totalParts = int(sm[i])
+					segmentedInfo.TotalParts = int(sm[i])
 					i++
-					segmentedInfo.part = int(sm[i])
+					segmentedInfo.Part = int(sm[i])
 					i++
 					return segmentedInfo
 				}
 			case 0x08: //concat 16bit
 				if iel == 4 {
-					segmentedInfo.id = (int(sm[i]) << 8) | (int(sm[i+1]))
+					segmentedInfo.Id = (int(sm[i]) << 8) | (int(sm[i+1]))
 					i += 2
-					segmentedInfo.totalParts = int(sm[i])
+					segmentedInfo.TotalParts = int(sm[i])
 					i++
-					segmentedInfo.part = int(sm[i])
+					segmentedInfo.Part = int(sm[i])
 					i++
 					return segmentedInfo
 				}
@@ -73,9 +73,9 @@ func NewSegmentedInfo(pdu *Pdu) *SegmentedInfo {
 			return segmentedInfo
 		}
 
-		segmentedInfo.id = int(sarMsgRefNum)
-		segmentedInfo.totalParts = int(sarTotalSegments)
-		segmentedInfo.part = int(sarSegmentSeqnum)
+		segmentedInfo.Id = int(sarMsgRefNum)
+		segmentedInfo.TotalParts = int(sarTotalSegments)
+		segmentedInfo.Part = int(sarSegmentSeqnum)
 	}
 
 	return segmentedInfo

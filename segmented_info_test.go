@@ -60,19 +60,19 @@ func TestNewSegmentedInfo(t *testing.T) {
 
 		segmentedInfo := NewSegmentedInfo(pdu)
 
-		if segmentedInfo.id != test.expectedId {
+		if segmentedInfo.Id != test.expectedId {
 			t.Errorf("in segmented info for pdu %v id %v not equals expected %v",
-				test.rawPdu, segmentedInfo.id, test.expectedId)
+				test.rawPdu, segmentedInfo.Id, test.expectedId)
 		}
 
-		if segmentedInfo.part != test.expectedPart {
+		if segmentedInfo.Part != test.expectedPart {
 			t.Errorf("in segmented info for pdu %v part %v not equals expected %v",
-				test.rawPdu, segmentedInfo.part, test.expectedPart)
+				test.rawPdu, segmentedInfo.Part, test.expectedPart)
 		}
 
-		if segmentedInfo.totalParts != test.expectedTotalParts {
+		if segmentedInfo.TotalParts != test.expectedTotalParts {
 			t.Errorf("in segmented info for pdu %v total parts %v not equals expected %v",
-				test.rawPdu, segmentedInfo.totalParts, test.expectedTotalParts)
+				test.rawPdu, segmentedInfo.TotalParts, test.expectedTotalParts)
 		}
 	}
 }
