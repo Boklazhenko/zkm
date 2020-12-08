@@ -18,15 +18,17 @@ var ErrTimeout = errors.New("timeout wait for response")
 var ErrClosed = errors.New("session closed")
 
 type Req struct {
-	Pdu *Pdu
-	j   *scheduler.Job
-	Ctx interface{}
+	Pdu  *Pdu
+	j    *scheduler.Job
+	Ctx  interface{}
+	Sent time.Time
 }
 
 type Resp struct {
-	Err error
-	Pdu *Pdu
-	Req *Req
+	Err      error
+	Pdu      *Pdu
+	Req      *Req
+	Received time.Time
 }
 
 type Evt interface {
@@ -536,6 +538,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 					s.inRespCh <- &Resp{
 						Pdu: pdu,
 						Req: req,
+						Received: now,
 					}
 
 					delete(s.reqsInFlight, pdu.Seq)
@@ -594,6 +597,7 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 						s.pduSentEvt(r.Pdu)
 
 						now := time.Now()
+						r.Sent = now
 
 						atomic.StoreInt64(&s.lastWriting, now.Unix())
 

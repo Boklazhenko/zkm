@@ -24,8 +24,7 @@ type DeliveryReceiptInfo struct {
 	Err   uint16
 }
 
-//"id:cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716 sub:001 dlvrd:001 submit " +
-//					"date:2010241205 done date:2010241206 stat:DELIVRD err:000"
+//"id:cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716 sub:001 dlvrd:001 submit date:2010241205 done date:2010241206 stat:DELIVRD err:000"
 
 func NewDeliveryReceiptInfo(pdu *Pdu) *DeliveryReceiptInfo {
 	dri := &DeliveryReceiptInfo{}
