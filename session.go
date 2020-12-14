@@ -318,10 +318,14 @@ func (s *Session) Run(ctx context.Context) {
 			now := time.Now()
 
 			if now.Unix()-atomic.LoadInt64(&s.lastReading) >= atomic.LoadInt64(&s.cfg.SilenceTimeoutSec) {
-				s.logEvt(Warning, fmt.Sprintf("silence timeout [%v] exceeded. Socket closing...",
-					atomic.LoadInt64(&s.cfg.SilenceTimeoutSec)))
+				s.logEvt(Warning, func() string {
+					return fmt.Sprintf("silence timeout [%v] exceeded. Socket closing...",
+						atomic.LoadInt64(&s.cfg.SilenceTimeoutSec))
+				})
 				if err := s.sock.close(); err != nil {
-					s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
+					s.logEvt(Error, func() string {
+						return fmt.Sprintf("can't close socket: [%v]", err)
+					})
 					s.errEvt(err)
 				}
 				return
@@ -340,14 +344,18 @@ func (s *Session) Run(ctx context.Context) {
 
 		s.scheduler.Run(ctx)
 
-		s.logEvt(Debug, "goroutine handling scheduler completed")
+		s.logEvt(Debug, func() string {
+			return "goroutine handling scheduler completed"
+		})
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		s.speedController.Run(ctx)
-		s.logEvt(Debug, "goroutine handling speed controller completed")
+		s.logEvt(Debug, func() string {
+			return "goroutine handling speed controller completed"
+		})
 	}()
 
 	wg.Add(1)
@@ -371,7 +379,9 @@ func (s *Session) Run(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		if err := s.sock.close(); err != nil {
-			s.logEvt(Error, fmt.Sprintf("can't close socket: [%v]", err))
+			s.logEvt(Error, func() string {
+				return fmt.Sprintf("can't close socket: [%v]", err)
+			})
 			s.errEvt(err)
 		}
 	}
@@ -386,7 +396,9 @@ func (s *Session) Run(ctx context.Context) {
 		}
 	}
 
-	s.logEvt(Debug, "session completed")
+	s.logEvt(Debug, func() string {
+		return "session completed"
+	})
 
 	close(s.evtCh)
 	close(s.inRespCh)
@@ -414,7 +426,9 @@ func (s *Session) OutRespCh() chan<- *Pdu {
 }
 
 func (s *Session) handleOutgoingResponses(ctx context.Context) {
-	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
+	defer s.logEvt(Debug, func() string {
+		return fmt.Sprintf("goroutine handling outgoing responses completed")
+	})
 
 	for {
 		select {
@@ -428,11 +442,15 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 			err := s.sock.write(pdu)
 
 			if err != nil {
-				s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", pdu, err))
+				s.logEvt(Error, func() string {
+					return fmt.Sprintf("can't write pdu [%v] to socket: [%v]", pdu, err)
+				})
 				s.errEvt(err)
 			} else {
 				atomic.StoreInt64(&s.lastWriting, time.Now().Unix())
-				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", pdu))
+				s.logEvt(Debug, func() string {
+					return fmt.Sprintf("sent pdu: [%v]", pdu)
+				})
 				s.pduSentEvt(pdu)
 			}
 		}
@@ -440,7 +458,9 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 }
 
 func (s *Session) handleIncomingPdus(ctx context.Context) {
-	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
+	defer s.logEvt(Debug, func() string {
+		return fmt.Sprintf("goroutine handling incoming pdus completed")
+	})
 	defer close(s.outRespCh)
 
 	for {
@@ -453,7 +473,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 		}
 
 		if err != nil {
-			s.logEvt(Error, fmt.Sprintf("can't read pdu from socket: [%v]", err))
+			s.logEvt(Error, func() string {
+				return fmt.Sprintf("can't read pdu from socket: [%v]", err)
+			})
 			s.errEvt(err)
 
 			if errors.Is(err, io.EOF) {
@@ -462,7 +484,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 				continue
 			}
 		} else {
-			s.logEvt(Debug, fmt.Sprintf("received pdu: [%v]", pdu))
+			s.logEvt(Debug, func() string {
+				return fmt.Sprintf("received pdu: [%v]", pdu)
+			})
 			s.pduReceivedEvt(pdu)
 		}
 
@@ -477,19 +501,25 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 					resp, err := pdu.CreateResp(EsmeRThrottled)
 
 					if err != nil {
-						s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+						s.logEvt(Error, func() string {
+							return fmt.Sprintf("can't create resp for pdu: [%v]", pdu)
+						})
 						s.errEvt(err)
 					} else {
 						s.outRespCh <- resp
 					}
 				} else if err != nil {
-					s.logEvt(Error, fmt.Sprintf("speed_controller.In returned error: [%v]", err))
+					s.logEvt(Error, func() string {
+						return fmt.Sprintf("speed_controller.In returned error: [%v]", err)
+					})
 					s.errEvt(err)
 
 					resp, err := pdu.CreateResp(EsmeRSysErr)
 
 					if err != nil {
-						s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+						s.logEvt(Error, func() string {
+							return fmt.Sprintf("can't create resp for pdu: [%v]", pdu)
+						})
 						s.errEvt(err)
 					} else {
 						s.outRespCh <- resp
@@ -499,7 +529,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						resp, err := pdu.CreateResp(EsmeROk)
 
 						if err != nil {
-							s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+							s.logEvt(Error, func() string {
+								return fmt.Sprintf("can't create resp for pdu: [%v]", pdu)
+							})
 							s.errEvt(err)
 						} else {
 							s.outRespCh <- resp
@@ -512,7 +544,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 				resp, err := pdu.CreateResp(EsmeRThrottled)
 
 				if err != nil {
-					s.logEvt(Error, fmt.Sprintf("can't create resp for pdu: [%v]", pdu))
+					s.logEvt(Error, func() string {
+						return fmt.Sprintf("can't create resp for pdu: [%v]", pdu)
+					})
 					s.errEvt(err)
 				} else {
 					s.outRespCh <- resp
@@ -546,7 +580,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 
 					delete(s.reqsInFlight, pdu.Seq)
 				} else {
-					s.logEvt(Warning, fmt.Sprintf("received unexpected pdu: [%v]", pdu))
+					s.logEvt(Warning, func() string {
+						return fmt.Sprintf("received unexpected pdu: [%v]", pdu)
+					})
 				}
 			}()
 		}
@@ -554,7 +590,9 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 }
 
 func (s *Session) handleOutgoingReqs(ctx context.Context) {
-	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
+	defer s.logEvt(Debug, func() string {
+		return fmt.Sprintf("goroutine handling outgoing requests completed")
+	})
 
 	var seq uint32
 
@@ -567,7 +605,9 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 					if errors.Is(err, context.Canceled) {
 						return
 					}
-					s.logEvt(Error, fmt.Sprintf("speed_controller.Out returned err: [%v]", err))
+					s.logEvt(Error, func() string {
+						return fmt.Sprintf("speed_controller.Out returned err: [%v]", err)
+					})
 					s.errEvt(err)
 					s.inRespCh <- &Resp{
 						Err: err,
@@ -600,9 +640,13 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 								Req: req,
 							}
 							delete(s.reqsInFlight, _seq)
-							s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.Pdu))
+							s.logEvt(Warning, func() string {
+								return fmt.Sprintf("req timeout exceeded for pdu [%v]", req.Pdu)
+							})
 						} else {
-							s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
+							s.logEvt(Warning, func() string {
+								return fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq)
+							})
 						}
 					})
 					s.reqsInFlight[seq] = r
@@ -617,14 +661,18 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 						delete(s.reqsInFlight, seq)
 						s.mu.Unlock()
 
-						s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.Pdu, err))
+						s.logEvt(Error, func() string {
+							return fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.Pdu, err)
+						})
 						s.errEvt(err)
 						s.inRespCh <- &Resp{
 							Err: err,
 							Req: r,
 						}
 					} else {
-						s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.Pdu))
+						s.logEvt(Debug, func() string {
+							return fmt.Sprintf("sent pdu: [%v]", r.Pdu)
+						})
 						s.pduSentEvt(r.Pdu)
 
 						r.Sent = now
@@ -658,12 +706,12 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 	}
 }
 
-func (s *Session) logEvt(severity Severity, msg string) {
+func (s *Session) logEvt(severity Severity, msgCreator func() string) {
 	if severity < s.cfg.LogSeverity {
 		return
 	}
 
-	s.evtCh <- &LogEvt{severity: severity, msg: fmt.Sprintf("[%v]: %v", s.RemoteAddr(), msg)}
+	s.evtCh <- &LogEvt{severity: severity, msg: fmt.Sprintf("[%v]: %v", s.RemoteAddr(), msgCreator())}
 }
 
 func (s *Session) errEvt(err error) {
