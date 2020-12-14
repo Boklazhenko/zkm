@@ -580,6 +580,31 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 					now := time.Now()
 
 					s.mu.Lock()
+					_seq := seq
+					r.j = s.scheduler.Once(time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ReqTimeoutSec)), func() {
+						s.mu.Lock()
+						defer s.mu.Unlock()
+
+						if req, ok := s.reqsInFlight[_seq]; ok {
+							outWin := atomic.AddInt32(&s.outWin, -1)
+							s.outWinChangedEvt(outWin)
+							if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
+								select {
+								case <-s.outWinSema:
+								default:
+								}
+							}
+
+							s.inRespCh <- &Resp{
+								Err: ErrTimeout,
+								Req: req,
+							}
+							delete(s.reqsInFlight, _seq)
+							s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.Pdu))
+						} else {
+							s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
+						}
+					})
 					s.reqsInFlight[seq] = r
 					throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
 					s.mu.Unlock()
@@ -588,6 +613,7 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 
 					if err != nil {
 						s.mu.Lock()
+						r.j.Cancel()
 						delete(s.reqsInFlight, seq)
 						s.mu.Unlock()
 
@@ -604,32 +630,6 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 						r.Sent = now
 
 						atomic.StoreInt64(&s.lastWriting, now.Unix())
-
-						_seq := seq
-						r.j = s.scheduler.Once(time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ReqTimeoutSec)), func() {
-							s.mu.Lock()
-							defer s.mu.Unlock()
-
-							if req, ok := s.reqsInFlight[_seq]; ok {
-								outWin := atomic.AddInt32(&s.outWin, -1)
-								s.outWinChangedEvt(outWin)
-								if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
-									select {
-									case <-s.outWinSema:
-									default:
-									}
-								}
-
-								s.inRespCh <- &Resp{
-									Err: ErrTimeout,
-									Req: req,
-								}
-								delete(s.reqsInFlight, _seq)
-								s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for pdu [%v]", req.Pdu))
-							} else {
-								s.logEvt(Warning, fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq))
-							}
-						})
 
 						outWin := atomic.AddInt32(&s.outWin, 1)
 						s.outWinChangedEvt(outWin)
