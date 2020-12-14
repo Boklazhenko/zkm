@@ -583,9 +583,20 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 					seq++
 					r.Pdu.Seq = seq
 
+					now := time.Now()
+
+					s.mu.Lock()
+					s.reqsInFlight[seq] = r
+					throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
+					s.mu.Unlock()
+
 					err := s.sock.write(r.Pdu)
 
 					if err != nil {
+						s.mu.Lock()
+						delete(s.reqsInFlight, seq)
+						s.mu.Unlock()
+
 						s.logEvt(Error, fmt.Sprintf("can't write pdu [%v] to socket: [%v]", r.Pdu, err))
 						s.errEvt(err)
 						s.inRespCh <- &Resp{
@@ -596,15 +607,9 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 						s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", r.Pdu))
 						s.pduSentEvt(r.Pdu)
 
-						now := time.Now()
 						r.Sent = now
 
 						atomic.StoreInt64(&s.lastWriting, now.Unix())
-
-						s.mu.Lock()
-						s.reqsInFlight[seq] = r
-						throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
-						s.mu.Unlock()
 
 						_seq := seq
 						r.j = s.scheduler.Once(time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ReqTimeoutSec)), func() {
