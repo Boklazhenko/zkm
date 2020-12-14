@@ -347,6 +347,7 @@ func (s *Session) Run(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 		s.speedController.Run(ctx)
+		s.logEvt(Debug, "goroutine handling speed controller completed")
 	}()
 
 	wg.Add(1)
@@ -413,9 +414,15 @@ func (s *Session) OutRespCh() chan<- *Pdu {
 }
 
 func (s *Session) handleOutgoingResponses(ctx context.Context) {
+	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
+
 	for {
 		select {
-		case pdu := <-s.outRespCh:
+		case pdu, ok := <-s.outRespCh:
+			if !ok {
+				return
+			}
+
 			s.inWinChangedEvt(atomic.AddInt32(&s.inWin, -1))
 
 			err := s.sock.write(pdu)
@@ -428,17 +435,13 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 				s.logEvt(Debug, fmt.Sprintf("sent pdu: [%v]", pdu))
 				s.pduSentEvt(pdu)
 			}
-		case <-ctx.Done():
-			for range s.outRespCh {
-			}
-			s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing responses completed"))
-			return
 		}
 	}
 }
 
 func (s *Session) handleIncomingPdus(ctx context.Context) {
 	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling incoming pdus completed"))
+	defer close(s.outRespCh)
 
 	for {
 		pdu, err := s.sock.read()
@@ -536,8 +539,8 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 					}
 
 					s.inRespCh <- &Resp{
-						Pdu: pdu,
-						Req: req,
+						Pdu:      pdu,
+						Req:      req,
 						Received: now,
 					}
 
@@ -551,16 +554,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 }
 
 func (s *Session) handleOutgoingReqs(ctx context.Context) {
-	defer func() {
-		for r := range s.outReqCh {
-			_r := r
-			s.inRespCh <- &Resp{
-				Err: ErrClosed,
-				Req: _r,
-			}
-		}
-		s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
-	}()
+	defer s.logEvt(Debug, fmt.Sprintf("goroutine handling outgoing requests completed"))
 
 	var seq uint32
 
