@@ -435,7 +435,7 @@ func newOptionalParam(tag Tag, len uint16) *optionalParam {
 	case TagCallbackNum:
 		value = newOctetStringValue(int(min(19, len)))
 	default:
-		value = newOctetStringValue(0)
+		value = newOctetStringValue(int(len))
 	}
 
 	return &optionalParam{t: tag, v: value}
