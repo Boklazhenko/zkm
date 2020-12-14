@@ -537,7 +537,7 @@ func (v *cOctetStringValue) deserialize(buff *bytes.Buffer) error {
 	if b, err := buff.ReadBytes(0x00); err != nil {
 		return err
 	} else if len(b) > v.maxLen {
-		return fmt.Errorf("real length %v exceeded the maximum length %v", len(v.r), v.maxLen)
+		return fmt.Errorf("real length %v exceeded the maximum length %v", len(b), v.maxLen)
 	} else {
 		v.r = b
 		return nil
