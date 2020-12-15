@@ -141,23 +141,23 @@ type SpeedController interface {
 var errThrottling = errors.New("throttling error")
 
 type DefaultSpeedController struct {
-	inRpsLimit  int32
-	outRpsLimit int32
-	inSec       int64
-	inReqs      int32
-	outReqsCh   chan struct{}
-	stop        chan struct{}
-	runCount    int32
+	inRpsLimit      int32
+	outIntervalNSec int64
+	inSec           int64
+	inReqs          int32
+	outReqsCh       chan struct{}
+	stop            chan struct{}
+	runCount        int32
 }
 
 func NewDefaultSpeedController() *DefaultSpeedController {
 	return &DefaultSpeedController{
-		inRpsLimit:  1,
-		outRpsLimit: 1,
-		inSec:       0,
-		inReqs:      0,
-		outReqsCh:   make(chan struct{}),
-		runCount:    0,
+		inRpsLimit:      1,
+		outIntervalNSec: int64(time.Second / 1),
+		inSec:           0,
+		inReqs:          0,
+		outReqsCh:       make(chan struct{}),
+		runCount:        0,
 	}
 }
 
@@ -192,7 +192,7 @@ func (c *DefaultSpeedController) In() error {
 
 func (c *DefaultSpeedController) SetRpsLimit(in, out int32) {
 	atomic.StoreInt32(&c.inRpsLimit, in)
-	atomic.StoreInt32(&c.outRpsLimit, out)
+	atomic.StoreInt64(&c.outIntervalNSec, int64(time.Second/time.Duration(out)))
 }
 
 func (c *DefaultSpeedController) Run(ctx context.Context) {
@@ -201,29 +201,17 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 		c.stop = make(chan struct{})
 
 		go func() {
-			sec := time.Now().Unix()
-			var reqs int32 = 0
+			defer close(c.outReqsCh)
+
 			for {
 				select {
 				case c.outReqsCh <- struct{}{}:
-					now := time.Now()
-					if s := now.Unix(); s != sec {
-						sec = s
-						reqs = 1
-					} else {
-						reqs++
-					}
-
-					if reqs >= atomic.LoadInt32(&c.outRpsLimit) {
-						select {
-						case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
-						case <-c.stop:
-							close(c.outReqsCh)
-							return
-						}
+					select {
+					case <-time.After(time.Duration(atomic.LoadInt64(&c.outIntervalNSec))):
+					case <-c.stop:
+						return
 					}
 				case <-c.stop:
-					close(c.outReqsCh)
 					return
 				}
 			}
