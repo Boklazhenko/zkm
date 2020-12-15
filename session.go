@@ -651,6 +651,7 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 					})
 					s.reqsInFlight[seq] = r
 					throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
+					r.Sent = now
 					s.mu.Unlock()
 
 					err := s.sock.write(r.Pdu)
@@ -674,9 +675,6 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 							return fmt.Sprintf("sent pdu: [%v]", r.Pdu)
 						})
 						s.pduSentEvt(r.Pdu)
-
-						r.Sent = now
-
 						atomic.StoreInt64(&s.lastWriting, now.Unix())
 
 						outWin := atomic.AddInt32(&s.outWin, 1)
