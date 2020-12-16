@@ -203,11 +203,15 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 		go func() {
 			defer close(c.outReqsCh)
 
+			timer := time.NewTimer(0)
+			<-timer.C
+
 			for {
 				select {
 				case c.outReqsCh <- struct{}{}:
+					timer.Reset(time.Duration(atomic.LoadInt64(&c.outIntervalNSec)))
 					select {
-					case <-time.After(time.Duration(atomic.LoadInt64(&c.outIntervalNSec))):
+					case <-timer.C:
 					case <-c.stop:
 						return
 					}
