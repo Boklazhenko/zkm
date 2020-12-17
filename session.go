@@ -213,7 +213,6 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 						select {
 						case <-time.After(time.Duration(time.Second.Nanoseconds() - int64(now.Nanosecond()))):
 						case <-c.stop:
-							close(c.outReqsCh)
 							return
 						}
 					}
