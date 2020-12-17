@@ -554,7 +554,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 				}
 
 				if req, ok := s.reqsInFlight[pdu.Seq]; ok {
-					//req.j.Cancel()
+					req.j.Cancel()
 					outWin := atomic.AddInt32(&s.outWin, -1)
 					s.outWinChangedEvt(outWin)
 					if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
@@ -612,8 +612,8 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 					now := time.Now()
 
 					s.mu.Lock()
-					//_seq := seq
-		/*			r.j = s.scheduler.Once(time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ReqTimeoutSec)), func() {
+					_seq := seq
+					r.j = s.scheduler.Once(time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ReqTimeoutSec)), func() {
 						s.mu.Lock()
 						defer s.mu.Unlock()
 
@@ -640,7 +640,7 @@ func (s *Session) handleOutgoingReqs(ctx context.Context) {
 								return fmt.Sprintf("req timeout exceeded for seq [%v], but req not found", _seq)
 							})
 						}
-					})*/
+					})
 					s.reqsInFlight[seq] = r
 					throttlePause := time.Second*time.Duration(atomic.LoadInt32(&s.cfg.ThrottlePauseSec)) - now.Sub(s.lastThrottle)
 					r.Sent = now
