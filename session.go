@@ -209,8 +209,8 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 					timer.Reset(time.Duration(interval))
 					s := time.Now()
 					select {
-					case w := <-timer.C:
-					  lag = w.Sub(s).Nanoseconds() - interval
+					case <-timer.C:
+					  lag = time.Now().Sub(s).Nanoseconds() - interval
 					case <-c.stop:
 						return
 					}
