@@ -248,11 +248,8 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 						idealInterval := atomic.LoadInt64(&c.outIntervalNSec)
 						now := time.Now().UnixNano()
 
-						if stopping := now - sent - idealInterval; stopping > 0 {
-							lag -= stopping
-							if lag < 0 {
-								lag = 0
-							}
+						if time.Duration(now-sent) > time.Second {
+							lag = 0
 						}
 
 						sent = now
