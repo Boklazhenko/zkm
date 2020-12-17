@@ -163,12 +163,8 @@ func NewDefaultSpeedController() *DefaultSpeedController {
 
 func (c *DefaultSpeedController) Out(ctx context.Context) error {
 	select {
-	case _, ok := <-c.outReqsCh:
-		if ok {
-			return nil
-		} else {
-			return fmt.Errorf("controller stopped")
-		}
+	case c.outReqsCh <- struct{}{}:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -197,18 +193,15 @@ func (c *DefaultSpeedController) SetRpsLimit(in, out int32) {
 
 func (c *DefaultSpeedController) Run(ctx context.Context) {
 	if atomic.AddInt32(&c.runCount, 1) == 1 {
-		c.outReqsCh = make(chan struct{})
 		c.stop = make(chan struct{})
 
 		go func() {
-			defer close(c.outReqsCh)
-
 			timer := time.NewTimer(0)
 			<-timer.C
 
 			for {
 				select {
-				case c.outReqsCh <- struct{}{}:
+				case <-c.outReqsCh:
 					timer.Reset(time.Duration(atomic.LoadInt64(&c.outIntervalNSec)))
 					select {
 					case <-timer.C:
