@@ -199,12 +199,18 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 			timer := time.NewTimer(0)
 			<-timer.C
 
+			var lag int64 = 0
+
 			for {
 				select {
 				case <-c.outReqsCh:
-					timer.Reset(time.Duration(atomic.LoadInt64(&c.outIntervalNSec)))
+					idealInterval := atomic.LoadInt64(&c.outIntervalNSec)
+					interval := idealInterval - lag
+					timer.Reset(time.Duration(interval))
+					s := time.Now()
 					select {
-					case <-timer.C:
+					case w := <-timer.C:
+					  lag = w.Sub(s).Nanoseconds() - interval
 					case <-c.stop:
 						return
 					}
