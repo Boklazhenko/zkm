@@ -247,13 +247,17 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 						sent := time.Now().UnixNano()
 						idealInterval := atomic.LoadInt64(&c.outIntervalNSec)
 						interval := idealInterval - lag
-						timer.Reset(time.Duration(interval))
-						select {
-						case <-timer.C:
-							now := time.Now().UnixNano()
-							lag += now - sent - idealInterval
-						case <-c.stop:
-							return
+						if interval > 0 {
+							timer.Reset(time.Duration(interval))
+							select {
+							case <-timer.C:
+								now := time.Now().UnixNano()
+								lag += now - sent - idealInterval
+							case <-c.stop:
+								return
+							}
+						} else {
+							lag -= idealInterval
 						}
 					case <-c.stop:
 						return
