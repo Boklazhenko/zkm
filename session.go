@@ -240,19 +240,28 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 				<-timer.C
 
 				var lag int64 = 0
+				var sent int64 = 0
 
 				for {
 					select {
 					case <-c.outReqsCh:
-						sent := time.Now().UnixNano()
 						idealInterval := atomic.LoadInt64(&c.outIntervalNSec)
+						now := time.Now().UnixNano()
+
+						if stopping := now - sent - idealInterval; stopping > 0 {
+							lag -= stopping
+							if lag < 0 {
+								lag = 0
+							}
+						}
+
+						sent = now
 						interval := idealInterval - lag
 						if interval > 0 {
 							timer.Reset(time.Duration(interval))
 							select {
 							case <-timer.C:
-								now := time.Now().UnixNano()
-								lag += now - sent - idealInterval
+								lag += time.Now().UnixNano() - sent - idealInterval
 							case <-c.stop:
 								return
 							}
