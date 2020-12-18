@@ -496,6 +496,8 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 				})
 				s.pduSentEvt(pdu)
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -504,7 +506,6 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 	defer s.logEvt(Debug, func() string {
 		return fmt.Sprintf("goroutine handling incoming pdus completed")
 	})
-	defer close(s.outRespCh)
 
 	for {
 		pdu, err := s.sock.read()
@@ -549,7 +550,11 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						})
 						s.errEvt(err)
 					} else {
-						s.outRespCh <- resp
+						select {
+						case s.outRespCh <- resp:
+						case <-ctx.Done():
+							return
+						}
 					}
 				} else if err != nil {
 					s.logEvt(Error, func() string {
@@ -565,7 +570,11 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						})
 						s.errEvt(err)
 					} else {
-						s.outRespCh <- resp
+						select {
+						case s.outRespCh <- resp:
+						case <-ctx.Done():
+							return
+						}
 					}
 				} else {
 					if pdu.Id == EnquireLink {
@@ -577,7 +586,11 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 							})
 							s.errEvt(err)
 						} else {
-							s.outRespCh <- resp
+							select {
+							case s.outRespCh <- resp:
+							case <-ctx.Done():
+								return
+							}
 						}
 					} else {
 						s.inReqCh <- pdu
@@ -592,7 +605,11 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 					})
 					s.errEvt(err)
 				} else {
-					s.outRespCh <- resp
+					select {
+					case s.outRespCh <- resp:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		} else {
