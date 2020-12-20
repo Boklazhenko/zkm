@@ -93,26 +93,59 @@ const (
 )
 
 type Pdu struct {
-	Id              Id
-	Status          Status
-	Seq             uint32
+	id              Id
+	status          Status
+	seq             uint32
 	mandatoryParams *mandatoryParams
 	optionalParams  *optionalParams
+	raw             []byte
 }
 
 func NewEmptyPdu() *Pdu {
 	return &Pdu{
-		Id:              0,
+		id:              0,
 		mandatoryParams: newMandatoryParams(0),
 		optionalParams:  newOptionalParams(),
+		raw:             nil,
 	}
 }
 
 func NewPdu(id Id) *Pdu {
 	return &Pdu{
-		Id:              id,
+		id:              id,
 		mandatoryParams: newMandatoryParams(id),
 		optionalParams:  newOptionalParams(),
+		raw:             nil,
+	}
+}
+
+func (pdu *Pdu) Id() Id {
+	return pdu.id
+}
+
+func (pdu *Pdu) Status() Status {
+	return pdu.status
+}
+
+func (pdu *Pdu) SetStatus(status Status) {
+	pdu.status = status
+	if pdu.raw != nil {
+		rawStatus := make([]byte, pduHeaderPartSize)
+		binary.BigEndian.PutUint32(rawStatus, uint32(status))
+		copy(pdu.raw[2*pduHeaderPartSize:], rawStatus)
+	}
+}
+
+func (pdu *Pdu) Seq() uint32 {
+	return pdu.seq
+}
+
+func (pdu *Pdu) SetSeq(seq uint32) {
+	pdu.seq = seq
+	if pdu.raw != nil {
+		rawSeq := make([]byte, pduHeaderPartSize)
+		binary.BigEndian.PutUint32(rawSeq, seq)
+		copy(pdu.raw[3*pduHeaderPartSize:], rawSeq)
 	}
 }
 
@@ -121,12 +154,12 @@ func (pdu *Pdu) String() string {
 }
 
 func (pdu *Pdu) IsReq() bool {
-	return pdu.Id&0x80000000 == 0
+	return pdu.id&0x80000000 == 0
 }
 
 func (pdu *Pdu) CreateResp(status Status) (*Pdu, error) {
 	var resp *Pdu
-	switch pdu.Id {
+	switch pdu.id {
 	case BindReceiver:
 		resp = NewPdu(BindReceiverResp)
 	case BindTransmitter:
@@ -155,25 +188,31 @@ func (pdu *Pdu) CreateResp(status Status) (*Pdu, error) {
 		return nil, fmt.Errorf("cann't create resp for cmd id [%v]", pdu.Id)
 	}
 
-	resp.Seq = pdu.Seq
-	resp.Status = status
+	resp.SetSeq(pdu.Seq())
+	resp.SetStatus(status)
 	return resp, nil
 }
 
 func (pdu *Pdu) Serialize() []byte {
+	if pdu.raw != nil {
+		return pdu.raw
+	}
+
 	buff := bytes.Buffer{}
 	b := make([]byte, pduHeaderPartSize)
 	binary.BigEndian.PutUint32(b, pdu.Len())
 	buff.Write(b)
-	binary.BigEndian.PutUint32(b, uint32(pdu.Id))
+	binary.BigEndian.PutUint32(b, uint32(pdu.id))
 	buff.Write(b)
-	binary.BigEndian.PutUint32(b, uint32(pdu.Status))
+	binary.BigEndian.PutUint32(b, uint32(pdu.status))
 	buff.Write(b)
-	binary.BigEndian.PutUint32(b, pdu.Seq)
+	binary.BigEndian.PutUint32(b, pdu.seq)
 	buff.Write(b)
 	buff.Write(pdu.mandatoryParams.serialize())
 	buff.Write(pdu.optionalParams.serialize())
-	return buff.Bytes()
+
+	pdu.raw = buff.Bytes()
+	return pdu.raw
 }
 
 func (pdu *Pdu) Deserialize(raw []byte) error {
@@ -195,21 +234,21 @@ func (pdu *Pdu) Deserialize(raw []byte) error {
 	if n != pduHeaderPartSize {
 		return err
 	}
-	pdu.Id = Id(binary.BigEndian.Uint32(b))
+	pdu.id = Id(binary.BigEndian.Uint32(b))
 
 	n, err = buff.Read(b)
 	if n != pduHeaderPartSize {
 		return err
 	}
-	pdu.Status = Status(binary.BigEndian.Uint32(b))
+	pdu.status = Status(binary.BigEndian.Uint32(b))
 
 	n, err = buff.Read(b)
 	if n != pduHeaderPartSize {
 		return err
 	}
-	pdu.Seq = binary.BigEndian.Uint32(b)
+	pdu.seq = binary.BigEndian.Uint32(b)
 
-	pdu.mandatoryParams = newMandatoryParams(pdu.Id)
+	pdu.mandatoryParams = newMandatoryParams(pdu.id)
 
 	if err = pdu.mandatoryParams.deserialize(buff); err != nil {
 		return err
@@ -217,7 +256,12 @@ func (pdu *Pdu) Deserialize(raw []byte) error {
 
 	pdu.optionalParams = newOptionalParams()
 
-	return pdu.optionalParams.deserialize(buff)
+	if err = pdu.optionalParams.deserialize(buff); err != nil {
+		return err
+	}
+
+	pdu.raw = raw
+	return nil
 }
 
 func (pdu *Pdu) SetMain(name Name, value interface{}) error {
@@ -226,6 +270,8 @@ func (pdu *Pdu) SetMain(name Name, value interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	pdu.raw = nil
 
 	return p.value().set(value)
 }
@@ -261,6 +307,7 @@ func (pdu *Pdu) GetMainAsUint32(name Name) (uint32, error) {
 }
 
 func (pdu *Pdu) SetOpt(tag Tag, value interface{}) error {
+	pdu.raw = nil
 	return pdu.optionalParams.add(tag, value)
 }
 

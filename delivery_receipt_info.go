@@ -29,7 +29,7 @@ type DeliveryReceiptInfo struct {
 func NewDeliveryReceiptInfo(pdu *Pdu) *DeliveryReceiptInfo {
 	dri := &DeliveryReceiptInfo{}
 
-	if pdu.Id != DeliverSm {
+	if pdu.id != DeliverSm {
 		return dri
 	}
 

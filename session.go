@@ -582,7 +582,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						}
 					}
 				} else {
-					if pdu.Id == EnquireLink {
+					if pdu.id == EnquireLink {
 						resp, err := pdu.CreateResp(EsmeROk)
 
 						if err != nil {
@@ -622,11 +622,11 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 
-				if pdu.Status == EsmeRThrottled {
+				if pdu.status == EsmeRThrottled {
 					s.lastThrottle = now
 				}
 
-				if req, ok := s.reqsInFlight[pdu.Seq]; ok {
+				if req, ok := s.reqsInFlight[pdu.seq]; ok {
 					req.j.Cancel()
 					outWin := atomic.AddInt32(&s.outWin, -1)
 					s.outWinChangedEvt(outWin)
@@ -637,7 +637,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						}
 					}
 
-					if pdu.Status == EsmeRThrottled && req.retries < atomic.LoadInt32(&s.cfg.ThrottleRetriesMaxCount) {
+					if pdu.status == EsmeRThrottled && req.retries < atomic.LoadInt32(&s.cfg.ThrottleRetriesMaxCount) {
 						select {
 						case s.retriesCh <- req:
 						default:
@@ -656,7 +656,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 						}
 					}
 
-					delete(s.reqsInFlight, pdu.Seq)
+					delete(s.reqsInFlight, pdu.seq)
 				} else {
 					s.logEvt(Warning, func() string {
 						return fmt.Sprintf("received unexpected pdu: [%v]", pdu)
@@ -707,7 +707,7 @@ func (s *Session) handleOutgoingReq(r *Req, seq *uint32, ctx context.Context) {
 	} else {
 		*seq++
 		_seq := *seq
-		r.Pdu.Seq = _seq
+		r.Pdu.SetSeq(_seq)
 
 		now := time.Now()
 
@@ -810,11 +810,11 @@ func (s *Session) outWinChangedEvt(value int32) {
 }
 
 func (s *Session) pduReceivedEvt(pdu *Pdu) {
-	s.evtCh <- &PduReceivedEvt{id: pdu.Id, status: pdu.Status}
+	s.evtCh <- &PduReceivedEvt{id: pdu.id, status: pdu.status}
 }
 
 func (s *Session) pduSentEvt(pdu *Pdu) {
-	s.evtCh <- &PduSentEvt{id: pdu.Id, status: pdu.Status}
+	s.evtCh <- &PduSentEvt{id: pdu.id, status: pdu.status}
 }
 
 func (s *Session) RemoteAddr() net.Addr {
