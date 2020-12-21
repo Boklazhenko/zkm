@@ -18,11 +18,13 @@ var ErrTimeout = errors.New("timeout wait for response")
 var ErrClosed = errors.New("session closed")
 
 type Req struct {
-	Pdu     *Pdu
-	j       *scheduler.Job
-	retries int32
-	Ctx     interface{}
-	Sent    time.Time
+	Pdu       *Pdu
+	Trace     bool
+	TraceInfo string
+	j         *scheduler.Job
+	retries   int32
+	Ctx       interface{}
+	Sent      time.Time
 }
 
 type Resp struct {
@@ -40,6 +42,7 @@ type Severity int8
 
 const (
 	Debug Severity = iota
+	ForceDebug
 	Info
 	Warning
 	Error
@@ -497,7 +500,7 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 			} else {
 				atomic.StoreInt64(&s.lastWriting, time.Now().Unix())
 				s.logEvt(Debug, func() string {
-					return fmt.Sprintf("sent pdu: [%v]", pdu)
+					return fmt.Sprintf("sent pdu: [%v][%X]", pdu, pdu.Serialize())
 				})
 				s.pduSentEvt(pdu)
 			}
@@ -534,7 +537,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 			}
 		} else {
 			s.logEvt(Debug, func() string {
-				return fmt.Sprintf("received pdu: [%v]", pdu)
+				return fmt.Sprintf("received pdu: [%v][%X]", pdu, pdu.Serialize())
 			})
 			s.pduReceivedEvt(pdu)
 		}
@@ -628,6 +631,13 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 
 				if req, ok := s.reqsInFlight[pdu.seq]; ok {
 					req.j.Cancel()
+
+					if req.Trace {
+						s.logEvt(ForceDebug, func() string {
+							return fmt.Sprintf("[%v] received pdu: [%v][%X]", req.TraceInfo, pdu, pdu.Serialize())
+						})
+					}
+
 					outWin := atomic.AddInt32(&s.outWin, -1)
 					s.outWinChangedEvt(outWin)
 					if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
@@ -640,6 +650,15 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 					if pdu.status == EsmeRThrottled && req.retries < atomic.LoadInt32(&s.cfg.ThrottleRetriesMaxCount) {
 						select {
 						case s.retriesCh <- req:
+							if req.Trace {
+								s.logEvt(ForceDebug, func() string {
+									return fmt.Sprintf("[%v] retry pdu[%v]: [%v][%X]", req.TraceInfo, req.retries, req.Pdu, req.Pdu.Serialize())
+								})
+							} else {
+								s.logEvt(Debug, func() string {
+									return fmt.Sprintf("retry pdu[%v]: [%v][%X]", req.retries, req.Pdu, req.Pdu.Serialize())
+								})
+							}
 						default:
 							s.errEvt(fmt.Errorf("queue of retries full: %v", len(s.retriesCh)))
 							s.inRespCh <- &Resp{
@@ -763,9 +782,16 @@ func (s *Session) handleOutgoingReq(r *Req, seq *uint32, ctx context.Context) {
 				Req: r,
 			}
 		} else {
-			s.logEvt(Debug, func() string {
-				return fmt.Sprintf("sent pdu: [%v]", r.Pdu)
-			})
+			if r.Trace {
+				s.logEvt(ForceDebug, func() string {
+					return fmt.Sprintf("[%v] sent pdu: [%v][%X]", r.TraceInfo, r.Pdu, r.Pdu.Serialize())
+				})
+			} else {
+				s.logEvt(Debug, func() string {
+					return fmt.Sprintf("sent pdu: [%v][%X]", r.Pdu, r.Pdu.Serialize())
+				})
+			}
+
 			s.pduSentEvt(r.Pdu)
 			atomic.StoreInt64(&s.lastWriting, now.Unix())
 
@@ -794,7 +820,7 @@ func (s *Session) logEvt(severity Severity, msgCreator func() string) {
 		return
 	}
 
-	s.evtCh <- &LogEvt{severity: severity, msg: fmt.Sprintf("[%v]: %v", s.RemoteAddr(), msgCreator())}
+	s.evtCh <- &LogEvt{severity: severity, msg: msgCreator()}
 }
 
 func (s *Session) errEvt(err error) {
