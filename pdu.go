@@ -150,7 +150,7 @@ func (pdu *Pdu) SetSeq(seq uint32) {
 }
 
 func (pdu *Pdu) String() string {
-	return fmt.Sprintf("id:%v status:%v seq:%v", pdu.Id, pdu.Status, pdu.Seq)
+	return fmt.Sprintf("id:%v status:%v seq:%v", pdu.Id(), pdu.Status(), pdu.Seq())
 }
 
 func (pdu *Pdu) IsReq() bool {
@@ -185,7 +185,7 @@ func (pdu *Pdu) CreateResp(status Status) (*Pdu, error) {
 	case DataSm:
 		resp = NewPdu(DataSmResp)
 	default:
-		return nil, fmt.Errorf("cann't create resp for cmd id [%v]", pdu.Id)
+		return nil, fmt.Errorf("cann't create resp for cmd id [%v]", pdu.Id())
 	}
 
 	resp.SetSeq(pdu.Seq())

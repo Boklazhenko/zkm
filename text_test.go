@@ -87,8 +87,8 @@ func TestCreatePdus(t *testing.T) {
 			}
 
 			for i, pdu := range pdus {
-				if pdu.Id != id {
-					t.Fatalf("with text %v, id %v not equals expected %v", test.text, pdu.Id, DeliverSm)
+				if pdu.Id() != id {
+					t.Fatalf("with text %v, id %v not equals expected %v", test.text, pdu.Id(), DeliverSm)
 				}
 
 				if dcs, err := pdu.GetMainAsUint32(DataCoding); err != nil {

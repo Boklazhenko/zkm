@@ -45,8 +45,8 @@ func TestPdu(t *testing.T) {
 
 	createPdu := func(header header, mandatoryParams mandatoryParams, optionalParams optionalParams) (*Pdu, error) {
 		pdu := NewPdu(header.id)
-		pdu.Status = header.status
-		pdu.Seq = header.seq
+		pdu.SetStatus(header.status)
+		pdu.SetSeq(header.seq)
 		for _, p := range mandatoryParams {
 			if mp, err := pdu.mandatoryParams.get(p.name); err != nil {
 				return nil, err
@@ -69,16 +69,16 @@ func TestPdu(t *testing.T) {
 			return fmt.Errorf("len [%v] not equals expected [%v]", pdu.Len(), expected.l)
 		}
 
-		if pdu.Id != expected.id {
-			return fmt.Errorf("id [%v] not equals expected [%v]", pdu.Id, expected.id)
+		if pdu.Id() != expected.id {
+			return fmt.Errorf("id [%v] not equals expected [%v]", pdu.Id(), expected.id)
 		}
 
-		if pdu.Status != expected.status {
-			return fmt.Errorf("status [%v] not equals expected [%v]", pdu.Status, expected.status)
+		if pdu.Status() != expected.status {
+			return fmt.Errorf("status [%v] not equals expected [%v]", pdu.Status(), expected.status)
 		}
 
-		if pdu.Seq != expected.seq {
-			return fmt.Errorf("seq [%v] not equals expected [%v]", pdu.Seq, expected.seq)
+		if pdu.Seq() != expected.seq {
+			return fmt.Errorf("seq [%v] not equals expected [%v]", pdu.Seq(), expected.seq)
 		}
 
 		return nil
