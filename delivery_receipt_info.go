@@ -1,8 +1,10 @@
 package zkm
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type DeliveryReceiptState uint8
@@ -22,11 +24,12 @@ type DeliveryReceiptInfo struct {
 	Id    string
 	State DeliveryReceiptState
 	Err   uint16
+	Text  string
 }
 
 //"id:cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716 sub:001 dlvrd:001 submit date:2010241205 done date:2010241206 stat:DELIVRD err:000"
 
-func NewDeliveryReceiptInfo(pdu *Pdu) *DeliveryReceiptInfo {
+func NewDeliveryReceiptInfoByPdu(pdu *Pdu) *DeliveryReceiptInfo {
 	dri := &DeliveryReceiptInfo{}
 
 	if pdu.id != DeliverSm {
@@ -42,7 +45,9 @@ func NewDeliveryReceiptInfo(pdu *Pdu) *DeliveryReceiptInfo {
 		return dri
 	}
 
-	rawFields := strings.Split(string(rawText), " ")
+	dri.Text = string(rawText)
+
+	rawFields := strings.Split(dri.Text, " ")
 
 	for _, rawF := range rawFields {
 		f := strings.Split(rawF, ":")
@@ -82,6 +87,23 @@ func NewDeliveryReceiptInfo(pdu *Pdu) *DeliveryReceiptInfo {
 	}
 
 	return dri
+}
+
+func NewDeliveryReceiptInfo(msgId string, submitTime, doneTime int64, state DeliveryReceiptState, err uint16) *DeliveryReceiptInfo {
+	success := 1
+	if state != Delivered {
+		success = 0
+	}
+
+	return &DeliveryReceiptInfo{
+		Id:    msgId,
+		State: state,
+		Err:   err,
+		Text: fmt.Sprintf("id:%v sub:001 dlvrd:00%v submit date:%v done date:%v stat:%v err:%v",
+			msgId, success, time.Unix(submitTime, 0).Format("0601021504"),
+			time.Unix(doneTime, 0).Format("0601021504"),
+			state, err%1000),
+	}
 }
 
 func (s DeliveryReceiptState) String() string {

@@ -27,6 +27,11 @@ func TestNewDeliveryReceiptInfo(t *testing.T) {
 			if dri.Err != 0 {
 				t.Errorf("err [%v] not equals expected [%v]", dri.Err, 0)
 			}
+
+			expectedText := "id:cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716 sub:001 dlvrd:001 submit date:2010241205 done date:2010241206 stat:DELIVRD err:000"
+			if dri.Text != expectedText {
+				t.Errorf("text [%v] not equals expected [%v]", dri.Text, expectedText)
+			}
 		} else {
 			panic(err)
 		}
