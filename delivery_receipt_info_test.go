@@ -14,7 +14,7 @@ func TestNewDeliveryReceiptInfo(t *testing.T) {
 
 		pdu := NewEmptyPdu()
 		if err = pdu.Deserialize(b); err == nil {
-			dri := NewDeliveryReceiptInfo(pdu)
+			dri := NewDeliveryReceiptInfoByPdu(pdu)
 
 			if dri.Id != "cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716" {
 				t.Errorf("id [%v] not equals expected [%v]", dri.Id, "cb9c40f1-0aa1-4b3e-afb8-7dd24d03a716")
