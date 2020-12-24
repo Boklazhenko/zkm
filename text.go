@@ -10,13 +10,13 @@ func CreateDeliveries(text string, msgRefNumProvider func() uint16) ([]*Pdu, err
 
 func createPdus(text string, msgRefNumProvider func() uint16, id Id) ([]*Pdu, error) {
 	pdus := make([]*Pdu, 0)
-	dcs := SmscDefaultAlphabetScheme
+	dcs := Latin1Scheme
 	maxLen := 160
 	cutLen := 153
 	b := make([]byte, 0)
 	var err error
 
-	if b, err = Encode(text, Gsm7Unpacked()); err != nil {
+	if b, err = Encode(text, Latin1()); err != nil {
 		if b, err = Encode(text, Ucs2()); err == nil {
 			dcs = Ucs2Scheme
 			maxLen = 140
