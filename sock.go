@@ -7,24 +7,24 @@ import (
 	"net"
 )
 
-type sock struct {
+type Sock struct {
 	c net.Conn
 }
 
-func newSock(conn net.Conn) *sock {
-	return &sock{c: conn}
+func NewSock(conn net.Conn) *Sock {
+	return &Sock{c: conn}
 }
 
-func (s *sock) close() error {
+func (s *Sock) Close() error {
 	return s.c.Close()
 }
 
-func (s *sock) write(pdu *Pdu) error {
+func (s *Sock) Write(pdu *Pdu) error {
 	_, err := s.c.Write(pdu.Serialize())
 	return err
 }
 
-func (s *sock) read() (*Pdu, error) {
+func (s *Sock) Read() (*Pdu, error) {
 	rawL := make([]byte, pduHeaderPartSize)
 	_, err := io.ReadFull(s.c, rawL)
 

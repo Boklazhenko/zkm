@@ -314,7 +314,7 @@ func NewDefaultSessionConfig() *SessionConfig {
 }
 
 type Session struct {
-	sock            *sock
+	sock            *Sock
 	scheduler       *scheduler.Scheduler
 	inReqCh         chan *Pdu
 	evtCh           chan Evt
@@ -341,7 +341,7 @@ func NewSession(conn net.Conn, speedController SpeedController) *Session {
 func NewSessionWithConfig(conn net.Conn, cfg *SessionConfig, speedController SpeedController) *Session {
 	speedController.SetRpsLimit(cfg.InRpsLimit, cfg.OutRpsLimit)
 	return &Session{
-		sock:            newSock(conn),
+		sock:            NewSock(conn),
 		scheduler:       scheduler.New(),
 		inReqCh:         make(chan *Pdu, chanBuffSize),
 		evtCh:           make(chan Evt, chanBuffSize),
@@ -373,7 +373,7 @@ func (s *Session) Run(ctx context.Context) {
 					return fmt.Sprintf("silence timeout [%v] exceeded. Socket closing...",
 						atomic.LoadInt64(&s.cfg.SilenceTimeoutSec))
 				})
-				if err := s.sock.close(); err != nil {
+				if err := s.sock.Close(); err != nil {
 					s.logEvt(Error, func() string {
 						return fmt.Sprintf("can't close socket: [%v]", err)
 					})
@@ -429,7 +429,7 @@ func (s *Session) Run(ctx context.Context) {
 
 	select {
 	case <-ctx.Done():
-		if err := s.sock.close(); err != nil {
+		if err := s.sock.Close(); err != nil {
 			s.logEvt(Error, func() string {
 				return fmt.Sprintf("can't close socket: [%v]", err)
 			})
@@ -490,7 +490,7 @@ func (s *Session) handleOutgoingResponses(ctx context.Context) {
 
 			s.inWinChangedEvt(atomic.AddInt32(&s.inWin, -1))
 
-			err := s.sock.write(pdu)
+			err := s.sock.Write(pdu)
 
 			if err != nil {
 				s.logEvt(Error, func() string {
@@ -516,7 +516,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 	})
 
 	for {
-		pdu, err := s.sock.read()
+		pdu, err := s.sock.Read()
 
 		select {
 		case <-ctx.Done():
@@ -765,7 +765,7 @@ func (s *Session) handleOutgoingReq(r *Req, seq *uint32, ctx context.Context) {
 		r.Sent = now
 		s.mu.Unlock()
 
-		err := s.sock.write(r.Pdu)
+		err := s.sock.Write(r.Pdu)
 
 		if err != nil {
 			s.mu.Lock()
