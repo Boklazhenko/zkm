@@ -365,7 +365,7 @@ func (s *Session) Run(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 
-		s.scheduler.Every(time.Second, func() {
+		j := s.scheduler.Every(time.Second, func() {
 			now := time.Now()
 
 			if now.Unix()-atomic.LoadInt64(&s.lastReading) >= atomic.LoadInt64(&s.cfg.SilenceTimeoutSec) {
@@ -394,6 +394,8 @@ func (s *Session) Run(ctx context.Context) {
 		})
 
 		s.scheduler.Run(ctx)
+
+		j.Wait()
 
 		s.logEvt(Debug, func() string {
 			return "goroutine handling scheduler completed"
@@ -438,6 +440,17 @@ func (s *Session) Run(ctx context.Context) {
 	}
 
 	wg.Wait()
+
+	s.mu.Lock()
+	jobs := make([]*scheduler.Job, 0, len(s.reqsInFlight))
+	for _, r := range s.reqsInFlight {
+		jobs = append(jobs, r.j)
+	}
+	s.mu.Unlock()
+
+	for _, j := range jobs {
+		j.Wait()
+	}
 
 	for _, r := range s.reqsInFlight {
 		_r := r
