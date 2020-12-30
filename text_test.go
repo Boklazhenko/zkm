@@ -25,7 +25,7 @@ func TestCreatePdus(t *testing.T) {
 			expected: &expected{
 				totalParts: 1,
 				esmClass:   0,
-				dcs:        SmscDefaultAlphabetScheme,
+				dcs:        Latin1Scheme,
 			},
 		},
 		{
@@ -36,7 +36,7 @@ func TestCreatePdus(t *testing.T) {
 			expected: &expected{
 				totalParts: 1,
 				esmClass:   0,
-				dcs:        SmscDefaultAlphabetScheme,
+				dcs:        Latin1Scheme,
 			},
 		},
 		{
@@ -58,7 +58,7 @@ func TestCreatePdus(t *testing.T) {
 			expected: &expected{
 				totalParts: 4,
 				esmClass:   0x40,
-				dcs:        SmscDefaultAlphabetScheme,
+				dcs:        Latin1Scheme,
 			},
 		},
 		{
