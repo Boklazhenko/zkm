@@ -7,8 +7,8 @@ import (
 	"math"
 )
 
-var paramNotFound = fmt.Errorf("not found")
-var paramBadType = fmt.Errorf("bad type")
+var ParamNotFound = fmt.Errorf("not found")
+var ParamBadType = fmt.Errorf("bad type")
 
 type Name string
 
@@ -261,7 +261,7 @@ func (ps *mandatoryParams) get(name Name) (*mandatoryParam, error) {
 	if p, ok := ps.params[name]; ok {
 		return p, nil
 	} else {
-		return nil, paramNotFound
+		return nil, ParamNotFound
 	}
 }
 
@@ -391,7 +391,7 @@ func (ps *optionalParams) get(tag Tag) (*optionalParam, error) {
 	if p, ok := ps.params[tag]; ok {
 		return p, nil
 	} else {
-		return nil, paramNotFound
+		return nil, ParamNotFound
 	}
 }
 
@@ -487,7 +487,7 @@ func (v *octetStringValue) set(d interface{}) error {
 	case []byte:
 		v.r = data
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
@@ -508,7 +508,7 @@ func (v *octetStringValue) raw() []byte {
 }
 
 func (v *octetStringValue) uint32() (uint32, error) {
-	return 0, paramBadType
+	return 0, ParamBadType
 }
 
 type cOctetStringValue struct {
@@ -527,7 +527,7 @@ func (v *cOctetStringValue) set(d interface{}) error {
 			return err
 		}
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
@@ -563,7 +563,7 @@ func (v *fixedCOctetStringValue) set(d interface{}) error {
 			return err
 		}
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
@@ -600,7 +600,7 @@ func (v *uint8Value) set(d interface{}) error {
 	case int:
 		v.r[0] = uint8(data)
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
@@ -640,7 +640,7 @@ func (v *uint16Value) set(d interface{}) error {
 	case int:
 		binary.BigEndian.PutUint16(v.r, uint16(data))
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
@@ -685,7 +685,7 @@ func (v *uint32Value) set(d interface{}) error {
 	case int:
 		binary.BigEndian.PutUint32(v.r, uint32(data))
 	default:
-		return paramBadType
+		return ParamBadType
 	}
 
 	return nil
