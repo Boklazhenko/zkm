@@ -288,7 +288,8 @@ func (c *DefaultSpeedController) Run(ctx context.Context) {
 type SessionConfig struct {
 	InRpsLimit              int32
 	OutRpsLimit             int32
-	WinLimit                int32
+	InWinLimit              int32
+	OutWinLimit             int32
 	ThrottlePauseSec        int32
 	ThrottleRetriesMaxCount int32
 	ReqTimeoutSec           int32
@@ -302,7 +303,8 @@ func NewDefaultSessionConfig() *SessionConfig {
 	return &SessionConfig{
 		InRpsLimit:              1,
 		OutRpsLimit:             1,
-		WinLimit:                1,
+		InWinLimit:              1,
+		OutWinLimit:             1,
 		ThrottlePauseSec:        1,
 		ThrottleRetriesMaxCount: 3,
 		ReqTimeoutSec:           2,
@@ -561,7 +563,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 		if pdu.IsReq() {
 			inWin := atomic.AddInt32(&s.inWin, 1)
 			s.inWinChangedEvt(inWin)
-			if inWin <= atomic.LoadInt32(&s.cfg.WinLimit) {
+			if inWin <= atomic.LoadInt32(&s.cfg.InWinLimit) {
 				if err := s.speedController.In(); err == errThrottling {
 					resp, err := pdu.CreateResp(EsmeRThrottled)
 
@@ -653,7 +655,7 @@ func (s *Session) handleIncomingPdus(ctx context.Context) {
 
 					outWin := atomic.AddInt32(&s.outWin, -1)
 					s.outWinChangedEvt(outWin)
-					if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
+					if outWin < atomic.LoadInt32(&s.cfg.OutWinLimit) {
 						select {
 						case <-s.outWinSema:
 						default:
@@ -752,7 +754,7 @@ func (s *Session) handleOutgoingReq(r *Req, seq *uint32, ctx context.Context) {
 			if req, ok := s.reqsInFlight[_seq]; ok {
 				outWin := atomic.AddInt32(&s.outWin, -1)
 				s.outWinChangedEvt(outWin)
-				if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
+				if outWin < atomic.LoadInt32(&s.cfg.OutWinLimit) {
 					select {
 					case <-s.outWinSema:
 					default:
@@ -810,7 +812,7 @@ func (s *Session) handleOutgoingReq(r *Req, seq *uint32, ctx context.Context) {
 
 			outWin := atomic.AddInt32(&s.outWin, 1)
 			s.outWinChangedEvt(outWin)
-			if outWin < atomic.LoadInt32(&s.cfg.WinLimit) {
+			if outWin < atomic.LoadInt32(&s.cfg.OutWinLimit) {
 				select {
 				case <-s.outWinSema:
 				default:
@@ -863,7 +865,8 @@ func (s *Session) RemoteAddr() net.Addr {
 func (s *Session) SetConfig(cfg *SessionConfig) {
 	atomic.StoreInt32(&s.cfg.InRpsLimit, cfg.InRpsLimit)
 	atomic.StoreInt32(&s.cfg.OutRpsLimit, cfg.OutRpsLimit)
-	atomic.StoreInt32(&s.cfg.WinLimit, cfg.WinLimit)
+	atomic.StoreInt32(&s.cfg.InWinLimit, cfg.InWinLimit)
+	atomic.StoreInt32(&s.cfg.OutWinLimit, cfg.OutWinLimit)
 	atomic.StoreInt32(&s.cfg.ThrottlePauseSec, cfg.ThrottlePauseSec)
 	atomic.StoreInt32(&s.cfg.ThrottleRetriesMaxCount, cfg.ThrottleRetriesMaxCount)
 	atomic.StoreInt32(&s.cfg.ReqTimeoutSec, cfg.ReqTimeoutSec)
@@ -879,7 +882,8 @@ func (s *Session) GetConfig() *SessionConfig {
 	return &SessionConfig{
 		InRpsLimit:              atomic.LoadInt32(&s.cfg.InRpsLimit),
 		OutRpsLimit:             atomic.LoadInt32(&s.cfg.OutRpsLimit),
-		WinLimit:                atomic.LoadInt32(&s.cfg.WinLimit),
+		InWinLimit:              atomic.LoadInt32(&s.cfg.InWinLimit),
+		OutWinLimit:             atomic.LoadInt32(&s.cfg.OutWinLimit),
 		ThrottlePauseSec:        atomic.LoadInt32(&s.cfg.ThrottlePauseSec),
 		ThrottleRetriesMaxCount: atomic.LoadInt32(&s.cfg.ThrottleRetriesMaxCount),
 		ReqTimeoutSec:           atomic.LoadInt32(&s.cfg.ReqTimeoutSec),
