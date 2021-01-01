@@ -22,12 +22,12 @@ func FromSmppValidityPeriod(localTime time.Time, smppValidityPeriod string, defa
 	}
 
 	if len(smppValidityPeriod) != 16 {
-		return 0, ErrBadFormat
+		return 0, fmt.Errorf("%w: %v len not equals 16", ErrBadFormat, smppValidityPeriod)
 	}
 
 	for _, symbol := range smppValidityPeriod[:15] {
 		if symbol < 48 || 57 < symbol {
-			return 0, ErrBadFormat
+			return 0, fmt.Errorf("%w: %v sybmols not digits", ErrBadFormat, smppValidityPeriod)
 		}
 	}
 
@@ -41,7 +41,7 @@ func FromSmppValidityPeriod(localTime time.Time, smppValidityPeriod string, defa
 		fallthrough
 	case '+':
 		if nn > 48 {
-			return 0, ErrBadFormat
+			return 0, fmt.Errorf("%w: %v too big difference from UTC", ErrBadFormat, smppValidityPeriod)
 		}
 
 		rawSmppTime, err := time.Parse("060102150405", smppValidityPeriod[:12])
@@ -55,7 +55,7 @@ func FromSmppValidityPeriod(localTime time.Time, smppValidityPeriod string, defa
 			Sub(localTime.UTC()), nil
 	case 'R':
 		if t != 0 || nn != 0 {
-			return 0, ErrBadFormat
+			return 0, fmt.Errorf("%w: %v milliseconds or diference from UTC must be zero", ErrBadFormat, smppValidityPeriod)
 		}
 
 		YY := 10*(smppValidityPeriod[0]-'0') + (smppValidityPeriod[1] - '0')
@@ -66,12 +66,12 @@ func FromSmppValidityPeriod(localTime time.Time, smppValidityPeriod string, defa
 		ss := 10*(smppValidityPeriod[10]-'0') + (smppValidityPeriod[11] - '0')
 
 		if YY != 0 || MM != 0 {
-			return 0, ErrBadFormat
+			return 0, fmt.Errorf("%w: %v too big validity period", ErrBadFormat, smppValidityPeriod)
 		}
 
 		return time.Hour*24*time.Duration(DD) + time.Hour*time.Duration(hh) + time.Minute*time.Duration(mm) +
 			time.Second*time.Duration(ss), nil
 	default:
-		return 0, ErrBadFormat
+		return 0, fmt.Errorf("%w: %v bad last symbold", ErrBadFormat, smppValidityPeriod)
 	}
 }
